@@ -108,9 +108,17 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 FROM ${ALPINE_IMAGE}
 
 # Labels
-LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="Sub2API - AI API Gateway Platform"
-LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
+ARG VERSION="0.0.0-dev"
+ARG COMMIT="unknown"
+ARG DATE="unknown"
+LABEL maintainer="Tan <txzh007@163.com>"
+LABEL description="TToken - AI API Gateway Platform"
+LABEL org.opencontainers.image.title="TToken"
+LABEL org.opencontainers.image.description="TToken - AI API Gateway Platform"
+LABEL org.opencontainers.image.source="https://github.com/txzh007/sub2api"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${COMMIT}"
+LABEL org.opencontainers.image.created="${DATE}"
 
 # Install runtime dependencies
 RUN apk add --no-cache \

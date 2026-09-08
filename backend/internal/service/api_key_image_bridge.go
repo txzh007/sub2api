@@ -69,8 +69,8 @@ func (s *APIKeyService) imageBridgeModelsForGroup(ctx context.Context, group *Gr
 			seen[model] = true
 		}
 	}
-	if group.ModelsListConfig.Enabled && len(group.ModelsListConfig.Models) > 0 {
-		for _, model := range group.ModelsListConfig.Models {
+	if group.ModelAllowlist.Enabled && len(group.ModelAllowlist.Models) > 0 {
+		for _, model := range group.ModelAllowlist.Models {
 			if seen[model] {
 				models = append(models, model)
 			}
