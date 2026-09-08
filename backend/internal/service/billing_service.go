@@ -312,6 +312,10 @@ type BillingService struct {
 	// 让 "[Billing] Using fallback pricing" 每个模型每进程最多打一条,
 	// 避免热路径上每请求刷屏(issue #3394)。零值即可用,无需在构造函数初始化。
 	fallbackWarnSeen sync.Map
+
+	// unpricedWarnSeen 记录已报告过的未定价模型，避免同一新模型持续刷日志。
+	// 告警会明确指向热更新 override 与渠道定价两条修复路径。
+	unpricedWarnSeen sync.Map
 }
 
 // NewBillingService 创建计费服务实例
@@ -1222,6 +1226,9 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 		return s.applyModelSpecificPricingPolicy(model, fallback), nil
 	}
 
+	if _, seen := s.unpricedWarnSeen.LoadOrStore(model, struct{}{}); !seen {
+		log.Printf("[Billing] No pricing available for model %q; token usage will otherwise be recorded at $0. Configure pricing.override_file (supports prefix rules such as qwen3-*) or channel model pricing", model)
+	}
 	return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
 }
 

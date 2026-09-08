@@ -199,3 +199,63 @@ func TestPricingOverride_DisablesGPT55LadderOnDefaultCatalog(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 272000, pricing.LongContextInputThreshold, "其他模型的目录阶梯不受影响")
 }
+
+func TestPricingOverride_WildcardPricesNewModelVersions(t *testing.T) {
+	dir := t.TempDir()
+	catalogPath := filepath.Join(dir, "catalog.json")
+	require.NoError(t, os.WriteFile(catalogPath, []byte(`{
+		"sentinel-model": {"input_cost_per_token": 1e-06, "output_cost_per_token": 2e-06}
+	}`), 0644))
+	overridePath := filepath.Join(dir, "overrides.json")
+	require.NoError(t, os.WriteFile(overridePath, []byte(`{
+		"qwen3-*": {"litellm_provider": "dashscope", "mode": "chat",
+			"input_cost_per_token": 3e-06, "output_cost_per_token": 9e-06},
+		"qwen3-coder-*": {"litellm_provider": "dashscope", "mode": "chat",
+			"input_cost_per_token": 5e-06, "output_cost_per_token": 15e-06}
+	}`), 0644))
+
+	svc := &PricingService{cfg: &config.Config{}}
+	svc.cfg.Pricing.OverrideFile = overridePath
+	require.NoError(t, svc.loadPricingData(catalogPath))
+
+	general := svc.GetModelPricing("qwen3-235b-a22b-250901")
+	require.NotNil(t, general)
+	require.InDelta(t, 3e-6, general.InputCostPerToken, 1e-12)
+	require.InDelta(t, 9e-6, general.OutputCostPerToken, 1e-12)
+
+	// 最长前缀优先，较具体的 coder 规则覆盖 qwen3-*。
+	coder := svc.GetModelPricing("dashscope/qwen3-coder-plus-2026-09-08")
+	require.NotNil(t, coder)
+	require.InDelta(t, 5e-6, coder.InputCostPerToken, 1e-12)
+	require.InDelta(t, 15e-6, coder.OutputCostPerToken, 1e-12)
+
+	// 管理员显式通配规则可安全用于 response_model 计费准入。
+	require.Same(t, coder, svc.GetIdentifiedModelPricing("qwen3-coder-plus-2026-09-08"))
+}
+
+func TestPricingOverride_ExactPriceBeatsWildcardAndBareWildcardIsIgnored(t *testing.T) {
+	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"*": {
+			InputCostPerToken:  99e-6,
+			OutputCostPerToken: 99e-6,
+		},
+		"doubao-seed-*": {
+			InputCostPerToken:  2e-6,
+			OutputCostPerToken: 8e-6,
+		},
+		"doubao-seed-2.0-pro": {
+			InputCostPerToken:  4e-6,
+			OutputCostPerToken: 12e-6,
+		},
+	}}
+
+	exact := svc.GetModelPricing("doubao-seed-2.0-pro")
+	require.NotNil(t, exact)
+	require.InDelta(t, 4e-6, exact.InputCostPerToken, 1e-12)
+
+	wildcard := svc.GetModelPricing("doubao-seed-2.1-preview")
+	require.NotNil(t, wildcard)
+	require.InDelta(t, 2e-6, wildcard.InputCostPerToken, 1e-12)
+
+	require.Nil(t, svc.GetModelPricing("totally-unknown-model"), "裸 * 不得给所有未知媒体/文本模型套价")
+}

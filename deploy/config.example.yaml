@@ -1079,9 +1079,11 @@ pricing:
   # Model names must match catalog keys exactly. Edits are detected by content hash
   # at the next hash check and reloaded without restart.
   # 覆盖补丁文件（可选，优先级最高）：条目按字段浅合并覆盖目录/回退数据，
-  # 字段值为 null 表示删除该字段。模型名须与目录键完全一致。
+  # 字段值为 null 表示删除该字段。支持精确模型名，以及以 * 结尾的前缀规则
+  # （如 qwen3-*、doubao-seed-*）；多个规则同时命中时最长前缀优先。
+  # 裸 * 会被忽略，避免误把图片/视频等非 token 模型套入统一价格。
   # 修改后在下一次哈希检查时按内容哈希自动重载，无需重启。
-  # override_file: "./data/model_pricing_overrides.json"
+  override_file: "./data/model_pricing_overrides.json"
   # Update interval in hours
   # 更新间隔（小时）
   update_interval_hours: 24

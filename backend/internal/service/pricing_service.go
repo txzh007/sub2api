@@ -1126,12 +1126,20 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 		return pricing
 	}
 
-	// 4. 基于模型系列匹配（Claude）
+	// 4. 运维覆盖文件中的前缀通配规则。国模经常以日期、上下文长度或
+	// 推理档位发布新 ID；允许用 qwen3-* / doubao-seed-* 这类规则即时
+	// 接住新版本，不需要等待远程目录更新或重新编译。最长前缀优先，
+	// 因此 qwen3-coder-* 可以安全覆盖更宽的 qwen3-*。
+	if pricing := s.lookupWildcardModelPricingLocked(lookupCandidates); pricing != nil {
+		return pricing
+	}
+
+	// 5. 基于模型系列匹配（Claude）
 	if pricing := s.matchByModelFamily(lookupCandidates[0]); pricing != nil {
 		return pricing
 	}
 
-	// 5. OpenAI 模型回退策略
+	// 6. OpenAI 模型回退策略
 	if strings.HasPrefix(lookupCandidates[0], "gpt-") {
 		return s.matchOpenAIModel(lookupCandidates[0])
 	}
@@ -1180,6 +1188,38 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 	return nil
 }
 
+// lookupWildcardModelPricingLocked 匹配价格目录中以 * 结尾的前缀规则。
+// 仅接受带非空前缀的规则，避免一个裸 "*" 在误配置时把图片、视频等非 token
+// 模型全部套进同一价格。调用方必须持有 s.mu 读锁。
+func (s *PricingService) lookupWildcardModelPricingLocked(lookupCandidates []string) *LiteLLMModelPricing {
+	var best *LiteLLMModelPricing
+	bestPrefixLen := -1
+	bestPattern := ""
+
+	for pattern, pricing := range s.pricingData {
+		normalizedPattern := strings.ToLower(strings.TrimSpace(pattern))
+		if pricing == nil || !strings.HasSuffix(normalizedPattern, "*") {
+			continue
+		}
+		prefix := strings.TrimSuffix(normalizedPattern, "*")
+		if prefix == "" {
+			continue
+		}
+		for _, candidate := range lookupCandidates {
+			if !strings.HasPrefix(candidate, prefix) {
+				continue
+			}
+			if len(prefix) > bestPrefixLen || (len(prefix) == bestPrefixLen && normalizedPattern < bestPattern) {
+				best = pricing
+				bestPrefixLen = len(prefix)
+				bestPattern = normalizedPattern
+			}
+		}
+	}
+
+	return best
+}
+
 // GetIdentifiedModelPricing 在价格表中确定性地识别模型，识别不到时返回 nil。
 // 与 GetModelPricing 的区别：不会退化成按 "opus"/"haiku" 之类子串猜出的系列兜底价。
 // 用于必须区分"这是价格表里已知的模型"和"这只是名字里带某个关键词"的场景。
@@ -1194,7 +1234,12 @@ func (s *PricingService) GetIdentifiedModelPricing(modelName string) *LiteLLMMod
 	if modelLower == "" {
 		return nil
 	}
-	return s.lookupIdentifiedModelPricingLocked(s.buildModelLookupCandidates(modelLower))
+	candidates := s.buildModelLookupCandidates(modelLower)
+	if pricing := s.lookupIdentifiedModelPricingLocked(candidates); pricing != nil {
+		return pricing
+	}
+	// 通配规则是管理员显式配置的确定性价格规则，不属于系列猜价。
+	return s.lookupWildcardModelPricingLocked(candidates)
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {

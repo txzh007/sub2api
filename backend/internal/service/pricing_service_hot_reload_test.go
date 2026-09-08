@@ -117,6 +117,23 @@ func TestPricingHotReload_OverrideChangePatchesCatalogAndAddsModels(t *testing.T
 	require.Nil(t, svc.pricingData["override-new-model"])
 }
 
+func TestPricingHotReload_NewWildcardOverridePricesFutureModel(t *testing.T) {
+	svc := newHotReloadPricingService(t, "", "")
+	svc.cfg.Pricing.OverrideFile = filepath.Join(svc.cfg.Pricing.DataDir, "overrides.json")
+	require.Nil(t, svc.GetModelPricing("qwen3-next-20260908"))
+
+	require.NoError(t, os.WriteFile(svc.cfg.Pricing.OverrideFile, []byte(`{
+		"qwen3-*": {"litellm_provider": "dashscope", "mode": "chat",
+			"input_cost_per_token": 3e-06, "output_cost_per_token": 9e-06}
+	}`), 0644))
+	svc.reloadIfCustomFilesChanged()
+
+	pricing := svc.GetModelPricing("qwen3-next-20260908")
+	require.NotNil(t, pricing)
+	require.InDelta(t, 3e-6, pricing.InputCostPerToken, 1e-12)
+	require.InDelta(t, 9e-6, pricing.OutputCostPerToken, 1e-12)
+}
+
 func TestPricingHotReload_InvalidFileKeepsCurrentDataUntilFixed(t *testing.T) {
 	svc := newHotReloadPricingService(t, `{`+hotReloadModelJSON("custom-a", 4e-6, 8e-6)+`}`, "")
 	before := svc.customFilesHash
