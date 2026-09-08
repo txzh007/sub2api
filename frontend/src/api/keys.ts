@@ -65,9 +65,13 @@ export async function create(
   ipBlacklist?: string[],
   quota?: number,
   expiresInDays?: number,
-  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number }
+  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
+  imageBridgeModel?: string | null
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
+  if (imageBridgeModel !== undefined) {
+    payload.image_bridge_model = imageBridgeModel
+  }
   if (groupId !== undefined) {
     payload.group_id = groupId
   }
@@ -132,6 +136,7 @@ export async function toggleStatus(id: number, status: 'active' | 'inactive'): P
 }
 
 export const keysAPI = {
+	getImageBridgeModels,
   list,
   getById,
   create,
@@ -141,3 +146,14 @@ export const keysAPI = {
 }
 
 export default keysAPI
+
+export interface ImageBridgeModels {
+  group_id?: number
+  group_name: string
+  models: string[]
+}
+
+export async function getImageBridgeModels(): Promise<ImageBridgeModels> {
+  const { data } = await apiClient.get<ImageBridgeModels>('/keys/image-bridge-models')
+  return data
+}

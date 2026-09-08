@@ -81,6 +81,9 @@ func observedGeminiImageOutputs(c *gin.Context) int {
 // 也认映射后的上游模型名，与 shouldSkipCodexPlanGatedImageModelCooldown 对
 // requestedModel / modelKey 双取的口径一致。
 func resolveGeminiImageCount(c *gin.Context, originalModel, mappedModel string) int {
+	if c != nil && c.Request != nil && c.Request.Context().Value(geminiImageOutputRequiredKey{}) == true {
+		return observedGeminiImageOutputs(c)
+	}
 	if observed := observedGeminiImageOutputs(c); observed > 0 {
 		return observed
 	}

@@ -54,21 +54,22 @@ type AdminUser struct {
 }
 
 type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	GroupID     *int64     `json:"group_id"`
-	Status      string     `json:"status"`
-	IPWhitelist []string   `json:"ip_whitelist"`
-	IPBlacklist []string   `json:"ip_blacklist"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	LastUsedIP  *string    `json:"last_used_ip"`
-	Quota       float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
-	QuotaUsed   float64    `json:"quota_used"` // Used quota amount in USD
-	ExpiresAt   *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ImageBridgeModel *string    `json:"image_bridge_model"`
+	ID               int64      `json:"id"`
+	UserID           int64      `json:"user_id"`
+	Key              string     `json:"key"`
+	Name             string     `json:"name"`
+	GroupID          *int64     `json:"group_id"`
+	Status           string     `json:"status"`
+	IPWhitelist      []string   `json:"ip_whitelist"`
+	IPBlacklist      []string   `json:"ip_blacklist"`
+	LastUsedAt       *time.Time `json:"last_used_at"`
+	LastUsedIP       *string    `json:"last_used_ip"`
+	Quota            float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
+	QuotaUsed        float64    `json:"quota_used"` // Used quota amount in USD
+	ExpiresAt        *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
 	CurrentConcurrency int `json:"current_concurrency"`
 
@@ -189,7 +190,7 @@ type AdminGroup struct {
 	// OpenAI Messages 调度配置（仅 openai 平台使用）
 	DefaultMappedModel          string                                   `json:"default_mapped_model"`
 	MessagesDispatchModelConfig domain.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config"`
-	ModelsListConfig            domain.GroupModelsListConfig             `json:"models_list_config"`
+	ModelAllowlist              service.GroupModelAllowlist              `json:"model_allowlist"`
 	// 固定账号获取 Codex Model Manifest 配置（仅 openai 平台使用）。
 	CodexModelsManifestConfig domain.GroupCodexModelsManifestConfig `json:"codex_models_manifest_config"`
 

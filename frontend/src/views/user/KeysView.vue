@@ -131,6 +131,9 @@
                 :title="t('keys.ipRestrictionEnabled')"
               />
             </div>
+            <div v-if="row.group?.platform === 'openai' && row.image_bridge_model" class="mt-1 max-w-64 truncate text-xs text-gray-500 dark:text-dark-400" :title="row.image_bridge_model">
+              {{ t('keys.imageBridgeModel') }}: {{ row.image_bridge_model }}
+            </div>
           </template>
 
           <template #cell-group="{ row }">
@@ -506,6 +509,11 @@
             </template>
           </Select>
         </div>
+
+        <ImageBridgeModelSelect
+          v-if="(showCreateModal || showEditModal) && supportsImageBridge"
+          v-model="formData.image_bridge_model"
+        />
 
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
@@ -1127,6 +1135,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import ImageBridgeModelSelect from '@/components/keys/ImageBridgeModelSelect.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
 	import Pagination from '@/components/common/Pagination.vue'
@@ -1328,6 +1337,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 }
 
 const formData = ref({
+  image_bridge_model: '' as string | null,
   name: '',
   group_id: null as number | null,
   status: 'active' as 'active' | 'inactive',
@@ -1348,6 +1358,10 @@ const formData = ref({
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
 })
+
+const supportsImageBridge = computed(() =>
+  groups.value.find(group => group.id === formData.value.group_id)?.platform === 'openai'
+)
 
 // 自定义Key验证
 const customKeyError = computed(() => {
@@ -1563,6 +1577,7 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
+    image_bridge_model: key.image_bridge_model ?? null,
     group_id: key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
@@ -1719,6 +1734,7 @@ const handleSubmit = async () => {
   try {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
+        image_bridge_model: supportsImageBridge.value ? formData.value.image_bridge_model : '',
         name: formData.value.name,
         group_id: formData.value.group_id,
         ip_whitelist: ipWhitelist,
@@ -1744,7 +1760,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        supportsImageBridge.value ? formData.value.image_bridge_model : ''
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1789,6 +1806,7 @@ const closeModals = () => {
   selectedKey.value = null
   formData.value = {
     name: '',
+    image_bridge_model: '',
     group_id: null,
     status: 'active',
     use_custom_key: false,

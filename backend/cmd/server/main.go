@@ -26,25 +26,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// VERSION follows the upstream Sub2API release merged into this branch.
+// TTOKEN_VERSION is TToken's independent release line.
+//
 //go:embed VERSION
-var embeddedVersion string
+var embeddedUpstreamVersion string
+
+//go:embed TTOKEN_VERSION
+var embeddedTTokenVersion string
 
 // Build-time variables (can be set by ldflags)
 var (
-	Version   = ""
-	Commit    = "unknown"
-	Date      = "unknown"
-	BuildType = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
+	Version         = ""
+	UpstreamVersion = ""
+	Commit          = "unknown"
+	Date            = "unknown"
+	BuildType       = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
 )
 
 func init() {
+	UpstreamVersion = strings.TrimSpace(embeddedUpstreamVersion)
+	if UpstreamVersion == "" {
+		UpstreamVersion = "unknown"
+	}
+
 	// 如果 Version 已通过 ldflags 注入（例如 -X main.Version=...），则不要覆盖。
 	if strings.TrimSpace(Version) != "" {
 		return
 	}
 
-	// 默认从 embedded VERSION 文件读取版本号（编译期打包进二进制）。
-	Version = strings.TrimSpace(embeddedVersion)
+	// TToken 使用独立版本文件，避免合并上游时被 Sub2API VERSION 覆盖。
+	Version = strings.TrimSpace(embeddedTTokenVersion)
 	if Version == "" {
 		Version = "0.0.0-dev"
 	}
@@ -62,7 +74,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		log.Printf("Sub2API %s (commit: %s, built: %s)\n", Version, Commit, Date)
+		log.Printf("TToken %s (upstream: Sub2API %s, commit: %s, built: %s)\n", Version, UpstreamVersion, Commit, Date)
 		return
 	}
 

@@ -276,6 +276,13 @@ gateway:
   # 默认 false：保持纯文本 Codex 请求不被改写；客户端显式提供 image_generation tool 时，
   # 仍会在分组允许图片生成的情况下正常转发。
   codex_image_generation_bridge_enabled: false
+  # Optional Gemini image tool hosted by this gateway for HTTP /responses.
+  # Codex retains its text model; actual image calls use this Gemini model.
+  # Only applies to OpenAI-group keys that inherit the server default.
+  # Upstreams and image permissions come from the separate group named 生图.
+  # Prefer selecting a model per key; an empty default preserves native tools.
+  # Env: GATEWAY_CODEX_GEMINI_IMAGE_MODEL. See docs/GEMINI_IMAGE_BRIDGE.md.
+  codex_gemini_image_model: ""
   # Optional: template file used to build the final top-level Codex `instructions`.
   # 可选：用于构建最终 Codex 顶层 `instructions` 的模板文件路径。
   #

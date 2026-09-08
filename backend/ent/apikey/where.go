@@ -90,6 +90,11 @@ func GroupID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldGroupID, v))
 }
 
+// ImageBridgeModel applies equality check predicate on the "image_bridge_model" field. It's identical to ImageBridgeModelEQ.
+func ImageBridgeModel(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldImageBridgeModel, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))
@@ -468,6 +473,81 @@ func GroupIDIsNil() predicate.APIKey {
 // GroupIDNotNil applies the NotNil predicate on the "group_id" field.
 func GroupIDNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldGroupID))
+}
+
+// ImageBridgeModelEQ applies the EQ predicate on the "image_bridge_model" field.
+func ImageBridgeModelEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelNEQ applies the NEQ predicate on the "image_bridge_model" field.
+func ImageBridgeModelNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelIn applies the In predicate on the "image_bridge_model" field.
+func ImageBridgeModelIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldImageBridgeModel, vs...))
+}
+
+// ImageBridgeModelNotIn applies the NotIn predicate on the "image_bridge_model" field.
+func ImageBridgeModelNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldImageBridgeModel, vs...))
+}
+
+// ImageBridgeModelGT applies the GT predicate on the "image_bridge_model" field.
+func ImageBridgeModelGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelGTE applies the GTE predicate on the "image_bridge_model" field.
+func ImageBridgeModelGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelLT applies the LT predicate on the "image_bridge_model" field.
+func ImageBridgeModelLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelLTE applies the LTE predicate on the "image_bridge_model" field.
+func ImageBridgeModelLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelContains applies the Contains predicate on the "image_bridge_model" field.
+func ImageBridgeModelContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelHasPrefix applies the HasPrefix predicate on the "image_bridge_model" field.
+func ImageBridgeModelHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelHasSuffix applies the HasSuffix predicate on the "image_bridge_model" field.
+func ImageBridgeModelHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelIsNil applies the IsNil predicate on the "image_bridge_model" field.
+func ImageBridgeModelIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldImageBridgeModel))
+}
+
+// ImageBridgeModelNotNil applies the NotNil predicate on the "image_bridge_model" field.
+func ImageBridgeModelNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldImageBridgeModel))
+}
+
+// ImageBridgeModelEqualFold applies the EqualFold predicate on the "image_bridge_model" field.
+func ImageBridgeModelEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldImageBridgeModel, v))
+}
+
+// ImageBridgeModelContainsFold applies the ContainsFold predicate on the "image_bridge_model" field.
+func ImageBridgeModelContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldImageBridgeModel, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
