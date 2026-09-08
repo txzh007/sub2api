@@ -82,6 +82,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	out := &APIKey{
+		ImageBridgeModel:   k.ImageBridgeModel,
 		ID:                 k.ID,
 		UserID:             k.UserID,
 		Key:                k.Key,

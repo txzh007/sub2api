@@ -1,0 +1,1 @@
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS image_bridge_model VARCHAR(200);

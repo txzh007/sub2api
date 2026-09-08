@@ -720,6 +720,7 @@ export interface CompositeRouteDecision {
 }
 
 export interface ApiKey {
+	image_bridge_model?: string | null
   id: number
   user_id: number
   key: string
@@ -752,6 +753,7 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyRequest {
+	image_bridge_model?: string | null
   name: string
   group_id?: number | null
   custom_key?: string // Optional custom API Key
@@ -765,6 +767,7 @@ export interface CreateApiKeyRequest {
 }
 
 export interface UpdateApiKeyRequest {
+	image_bridge_model?: string | null
   name?: string
   group_id?: number | null
   status?: 'active' | 'inactive'

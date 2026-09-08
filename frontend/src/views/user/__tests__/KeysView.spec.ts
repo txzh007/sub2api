@@ -7,6 +7,7 @@ import KeysView from '../KeysView.vue'
 
 const {
   listKeys,
+  createKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
@@ -18,6 +19,7 @@ const {
   nextStep,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  createKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
@@ -58,7 +60,7 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
+    create: createKey,
     update: vi.fn(),
     delete: vi.fn(),
     toggleStatus: vi.fn(),
@@ -223,7 +225,8 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: true,
+        BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
+        ImageBridgeModelSelect: { name: 'ImageBridgeModelSelect', props: ['modelValue'], emits: ['update:modelValue'], template: '<div data-test="image-bridge" />' },
         ConfirmDialog: true,
         EmptyState: true,
         Select: SelectStub,
@@ -261,6 +264,7 @@ describe('user KeysView column settings', () => {
     localStorage.clear()
 
     listKeys.mockReset()
+    createKey.mockReset()
     getPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
@@ -283,6 +287,30 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
+  })
+
+  it('offers image bridging only for OpenAI groups and clears it from non-OpenAI submissions', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 5, name: 'GPT', platform: 'openai', rate_multiplier: 1 },
+      { id: 14, name: 'Gemini', platform: 'gemini', rate_multiplier: 1 }
+    ])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    expect(wrapper.find('[data-test="image-bridge"]').exists()).toBe(false)
+    const groupSelect = wrapper.findAllComponents(SelectStub).find(item => item.attributes('data-tour') === 'key-form-group')!
+    groupSelect.vm.$emit('update:modelValue', 5)
+    await nextTick()
+    expect(wrapper.find('[data-test="image-bridge"]').exists()).toBe(true)
+    wrapper.findComponent({ name: 'ImageBridgeModelSelect' }).vm.$emit('update:modelValue', 'gemini-3.1-flash-image')
+    groupSelect.vm.$emit('update:modelValue', 14)
+    await nextTick()
+    expect(wrapper.find('[data-test="image-bridge"]').exists()).toBe(false)
+    await wrapper.get('[data-tour="key-form-name"]').setValue('Gemini key')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(createKey).toHaveBeenCalled()
+    expect(createKey.mock.calls[0][1]).toBe(14)
+    expect(createKey.mock.calls[0][8]).toBe('')
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {

@@ -513,6 +513,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/image-providers',
+    name: 'AdminImageProviders',
+    component: () => import('@/views/admin/ImageProvidersView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Image Providers',
+      titleKey: 'imageProviders.title',
+      descriptionKey: 'imageProviders.description'
+    }
+  },
+  {
     path: '/admin/accounts',
     name: 'AdminAccounts',
     component: () => import('@/views/admin/AccountsView.vue'),

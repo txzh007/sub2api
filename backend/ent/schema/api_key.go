@@ -44,6 +44,11 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.String("image_bridge_model").
+			MaxLen(200).
+			Optional().
+			Nillable().
+			Comment("Image model from the image group; null inherits server defaults, empty disables bridging"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),

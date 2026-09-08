@@ -120,6 +120,26 @@ func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	return _u
 }
 
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (_u *APIKeyUpdate) SetImageBridgeModel(v string) *APIKeyUpdate {
+	_u.mutation.SetImageBridgeModel(v)
+	return _u
+}
+
+// SetNillableImageBridgeModel sets the "image_bridge_model" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableImageBridgeModel(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetImageBridgeModel(*v)
+	}
+	return _u
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (_u *APIKeyUpdate) ClearImageBridgeModel() *APIKeyUpdate {
+	_u.mutation.ClearImageBridgeModel()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdate) SetStatus(v string) *APIKeyUpdate {
 	_u.mutation.SetStatus(v)
@@ -555,6 +575,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ImageBridgeModel(); ok {
+		if err := apikey.ImageBridgeModelValidator(v); err != nil {
+			return &ValidationError{Name: "image_bridge_model", err: fmt.Errorf(`ent: validator failed for field "APIKey.image_bridge_model": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -592,6 +617,12 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ImageBridgeModel(); ok {
+		_spec.SetField(apikey.FieldImageBridgeModel, field.TypeString, value)
+	}
+	if _u.mutation.ImageBridgeModelCleared() {
+		_spec.ClearField(apikey.FieldImageBridgeModel, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -904,6 +935,26 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (_u *APIKeyUpdateOne) SetImageBridgeModel(v string) *APIKeyUpdateOne {
+	_u.mutation.SetImageBridgeModel(v)
+	return _u
+}
+
+// SetNillableImageBridgeModel sets the "image_bridge_model" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableImageBridgeModel(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetImageBridgeModel(*v)
+	}
+	return _u
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (_u *APIKeyUpdateOne) ClearImageBridgeModel() *APIKeyUpdateOne {
+	_u.mutation.ClearImageBridgeModel()
 	return _u
 }
 
@@ -1355,6 +1406,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ImageBridgeModel(); ok {
+		if err := apikey.ImageBridgeModelValidator(v); err != nil {
+			return &ValidationError{Name: "image_bridge_model", err: fmt.Errorf(`ent: validator failed for field "APIKey.image_bridge_model": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -1409,6 +1465,12 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ImageBridgeModel(); ok {
+		_spec.SetField(apikey.FieldImageBridgeModel, field.TypeString, value)
+	}
+	if _u.mutation.ImageBridgeModelCleared() {
+		_spec.ClearField(apikey.FieldImageBridgeModel, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)

@@ -621,6 +621,19 @@ export interface SyncUpstreamPreviewParams {
   model_mapping?: Record<string, string>
 }
 
+export interface ImageModelsPreviewParams {
+  account_id?: number
+  platform: 'openai' | 'gemini'
+  base_url: string
+  api_key?: string
+}
+
+/** Read the live list with draft settings and, when editing, the saved secret. */
+export async function previewImageModels(params: ImageModelsPreviewParams): Promise<{ models: string[] }> {
+  const { data } = await apiClient.post<{ models: string[] }>('/admin/accounts/models/image-preview', params)
+  return data
+}
+
 /**
  * Preview upstream models without a saved account (create-flow)
  * @param params - Connection credentials
@@ -1075,6 +1088,7 @@ export const accountsAPI = {
   getAvailableModels,
   syncUpstreamModels,
   syncUpstreamModelsPreview,
+  previewImageModels,
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,

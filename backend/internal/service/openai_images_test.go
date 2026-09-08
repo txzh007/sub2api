@@ -1339,57 +1339,61 @@ func TestOpenAIImagesSSEClientErrorsAreNotRetryable(t *testing.T) {
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyGenerationUsesConfiguredV1BaseURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)
+	for _, model := range []string{"gpt-image-2", "gemini-3.1-flash-image", "gemini-3-pro-image", "dall-e-3"} {
+		t.Run(model, func(t *testing.T) {
+			body := []byte(strings.ReplaceAll(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`, "gpt-image-2", model))
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = req
+			req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = req
 
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{},
-		httpUpstream: &httpUpstreamRecorder{
-			resp: &http.Response{
-				StatusCode: http.StatusOK,
-				Header: http.Header{
-					"Content-Type": []string{"application/json"},
-					"X-Request-Id": []string{"req_img_apikey"},
+			svc := &OpenAIGatewayService{
+				cfg: &config.Config{},
+				httpUpstream: &httpUpstreamRecorder{
+					resp: &http.Response{
+						StatusCode: http.StatusOK,
+						Header: http.Header{
+							"Content-Type": []string{"application/json"},
+							"X-Request-Id": []string{"req_img_apikey"},
+						},
+						Body: io.NopCloser(strings.NewReader(`{"created":1710000007,"data":[{"b64_json":"aGVsbG8=","revised_prompt":"draw a cat"}]}`)),
+					},
 				},
-				Body: io.NopCloser(strings.NewReader(`{"created":1710000007,"data":[{"b64_json":"aGVsbG8=","revised_prompt":"draw a cat"}]}`)),
-			},
-		},
+			}
+			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+			require.NoError(t, err)
+
+			account := &Account{
+				ID:       6,
+				Name:     "openai-apikey",
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key":  "test-api-key",
+					"base_url": "https://image-upstream.example/v1",
+				},
+			}
+
+			result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 1, result.ImageCount)
+			require.Equal(t, model, result.Model)
+			require.Equal(t, model, result.UpstreamModel)
+
+			upstream, ok := svc.httpUpstream.(*httpUpstreamRecorder)
+			require.True(t, ok)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, "https://image-upstream.example/v1/images/generations", upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer test-api-key", upstream.lastReq.Header.Get("Authorization"))
+			require.Equal(t, "application/json", upstream.lastReq.Header.Get("Content-Type"))
+			require.Equal(t, model, gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, "aGVsbG8=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+		})
 	}
-	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
-	require.NoError(t, err)
-
-	account := &Account{
-		ID:       6,
-		Name:     "openai-apikey",
-		Platform: PlatformOpenAI,
-		Type:     AccountTypeAPIKey,
-		Credentials: map[string]any{
-			"api_key":  "test-api-key",
-			"base_url": "https://image-upstream.example/v1",
-		},
-	}
-
-	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.ImageCount)
-	require.Equal(t, "gpt-image-2", result.Model)
-	require.Equal(t, "gpt-image-2", result.UpstreamModel)
-
-	upstream, ok := svc.httpUpstream.(*httpUpstreamRecorder)
-	require.True(t, ok)
-	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, "https://image-upstream.example/v1/images/generations", upstream.lastReq.URL.String())
-	require.Equal(t, "Bearer test-api-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Content-Type"))
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "aGVsbG8=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
 }
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyAccessStateUsesTypedFailover(t *testing.T) {

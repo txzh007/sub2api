@@ -116,6 +116,7 @@ type APIKeyMutation struct {
 	deleted_at         *time.Time
 	key                *string
 	name               *string
+	image_bridge_model *string
 	status             *string
 	last_used_at       *time.Time
 	ip_whitelist       *[]string
@@ -529,6 +530,55 @@ func (m *APIKeyMutation) GroupIDCleared() bool {
 func (m *APIKeyMutation) ResetGroupID() {
 	m.group = nil
 	delete(m.clearedFields, apikey.FieldGroupID)
+}
+
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (m *APIKeyMutation) SetImageBridgeModel(s string) {
+	m.image_bridge_model = &s
+}
+
+// ImageBridgeModel returns the value of the "image_bridge_model" field in the mutation.
+func (m *APIKeyMutation) ImageBridgeModel() (r string, exists bool) {
+	v := m.image_bridge_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldImageBridgeModel returns the old "image_bridge_model" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldImageBridgeModel(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldImageBridgeModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldImageBridgeModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldImageBridgeModel: %w", err)
+	}
+	return oldValue.ImageBridgeModel, nil
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (m *APIKeyMutation) ClearImageBridgeModel() {
+	m.image_bridge_model = nil
+	m.clearedFields[apikey.FieldImageBridgeModel] = struct{}{}
+}
+
+// ImageBridgeModelCleared returns if the "image_bridge_model" field was cleared in this mutation.
+func (m *APIKeyMutation) ImageBridgeModelCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldImageBridgeModel]
+	return ok
+}
+
+// ResetImageBridgeModel resets all changes to the "image_bridge_model" field.
+func (m *APIKeyMutation) ResetImageBridgeModel() {
+	m.image_bridge_model = nil
+	delete(m.clearedFields, apikey.FieldImageBridgeModel)
 }
 
 // SetStatus sets the "status" field.
@@ -1532,7 +1582,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1553,6 +1603,9 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, apikey.FieldGroupID)
+	}
+	if m.image_bridge_model != nil {
+		fields = append(fields, apikey.FieldImageBridgeModel)
 	}
 	if m.status != nil {
 		fields = append(fields, apikey.FieldStatus)
@@ -1624,6 +1677,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Name()
 	case apikey.FieldGroupID:
 		return m.GroupID()
+	case apikey.FieldImageBridgeModel:
+		return m.ImageBridgeModel()
 	case apikey.FieldStatus:
 		return m.Status()
 	case apikey.FieldLastUsedAt:
@@ -1679,6 +1734,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldName(ctx)
 	case apikey.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case apikey.FieldImageBridgeModel:
+		return m.OldImageBridgeModel(ctx)
 	case apikey.FieldStatus:
 		return m.OldStatus(ctx)
 	case apikey.FieldLastUsedAt:
@@ -1768,6 +1825,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case apikey.FieldImageBridgeModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetImageBridgeModel(v)
 		return nil
 	case apikey.FieldStatus:
 		v, ok := value.(string)
@@ -2016,6 +2080,9 @@ func (m *APIKeyMutation) ClearedFields() []string {
 	if m.FieldCleared(apikey.FieldGroupID) {
 		fields = append(fields, apikey.FieldGroupID)
 	}
+	if m.FieldCleared(apikey.FieldImageBridgeModel) {
+		fields = append(fields, apikey.FieldImageBridgeModel)
+	}
 	if m.FieldCleared(apikey.FieldLastUsedAt) {
 		fields = append(fields, apikey.FieldLastUsedAt)
 	}
@@ -2056,6 +2123,9 @@ func (m *APIKeyMutation) ClearField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ClearGroupID()
+		return nil
+	case apikey.FieldImageBridgeModel:
+		m.ClearImageBridgeModel()
 		return nil
 	case apikey.FieldLastUsedAt:
 		m.ClearLastUsedAt()
@@ -2106,6 +2176,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case apikey.FieldImageBridgeModel:
+		m.ResetImageBridgeModel()
 		return nil
 	case apikey.FieldStatus:
 		m.ResetStatus()

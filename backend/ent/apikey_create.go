@@ -99,6 +99,20 @@ func (_c *APIKeyCreate) SetNillableGroupID(v *int64) *APIKeyCreate {
 	return _c
 }
 
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (_c *APIKeyCreate) SetImageBridgeModel(v string) *APIKeyCreate {
+	_c.mutation.SetImageBridgeModel(v)
+	return _c
+}
+
+// SetNillableImageBridgeModel sets the "image_bridge_model" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableImageBridgeModel(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetImageBridgeModel(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *APIKeyCreate) SetStatus(v string) *APIKeyCreate {
 	_c.mutation.SetStatus(v)
@@ -449,6 +463,11 @@ func (_c *APIKeyCreate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.ImageBridgeModel(); ok {
+		if err := apikey.ImageBridgeModelValidator(v); err != nil {
+			return &ValidationError{Name: "image_bridge_model", err: fmt.Errorf(`ent: validator failed for field "APIKey.image_bridge_model": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "APIKey.status"`)}
 	}
@@ -530,6 +549,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.ImageBridgeModel(); ok {
+		_spec.SetField(apikey.FieldImageBridgeModel, field.TypeString, value)
+		_node.ImageBridgeModel = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -778,6 +801,24 @@ func (u *APIKeyUpsert) UpdateGroupID() *APIKeyUpsert {
 // ClearGroupID clears the value of the "group_id" field.
 func (u *APIKeyUpsert) ClearGroupID() *APIKeyUpsert {
 	u.SetNull(apikey.FieldGroupID)
+	return u
+}
+
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (u *APIKeyUpsert) SetImageBridgeModel(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldImageBridgeModel, v)
+	return u
+}
+
+// UpdateImageBridgeModel sets the "image_bridge_model" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateImageBridgeModel() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldImageBridgeModel)
+	return u
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (u *APIKeyUpsert) ClearImageBridgeModel() *APIKeyUpsert {
+	u.SetNull(apikey.FieldImageBridgeModel)
 	return u
 }
 
@@ -1203,6 +1244,27 @@ func (u *APIKeyUpsertOne) UpdateGroupID() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearGroupID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (u *APIKeyUpsertOne) SetImageBridgeModel(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetImageBridgeModel(v)
+	})
+}
+
+// UpdateImageBridgeModel sets the "image_bridge_model" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateImageBridgeModel() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateImageBridgeModel()
+	})
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (u *APIKeyUpsertOne) ClearImageBridgeModel() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearImageBridgeModel()
 	})
 }
 
@@ -1841,6 +1903,27 @@ func (u *APIKeyUpsertBulk) UpdateGroupID() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearGroupID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetImageBridgeModel sets the "image_bridge_model" field.
+func (u *APIKeyUpsertBulk) SetImageBridgeModel(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetImageBridgeModel(v)
+	})
+}
+
+// UpdateImageBridgeModel sets the "image_bridge_model" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateImageBridgeModel() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateImageBridgeModel()
+	})
+}
+
+// ClearImageBridgeModel clears the value of the "image_bridge_model" field.
+func (u *APIKeyUpsertBulk) ClearImageBridgeModel() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearImageBridgeModel()
 	})
 }
 

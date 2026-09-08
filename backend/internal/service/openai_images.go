@@ -474,7 +474,9 @@ func isGrokImageGenerationModel(model string) bool {
 
 func validateOpenAIImagesModel(model string) error {
 	model = strings.TrimSpace(model)
-	if isOpenAIImageGenerationModel(model) {
+	// OpenAI-compatible image providers can expose Gemini or DALL-E models.
+	// The account platform selects the wire protocol; the model prefix does not.
+	if isOpenAIImageGenerationModel(model) || isBridgeImageModel(model) {
 		return nil
 	}
 	if model == "" {
