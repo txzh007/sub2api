@@ -204,5 +204,73 @@ export async function syncPricingModels(platform: string): Promise<SyncPricingMo
   return data
 }
 
-const channelsAPI = { list, getById, create, update, remove, getModelDefaultPricing, syncPricingModels }
+export interface ModelPricingCatalogEntry {
+  model: string
+  litellm_provider: string
+  mode: string
+  input_cost_per_token: number
+  input_cost_per_token_priority: number
+  output_cost_per_token: number
+  output_cost_per_token_priority: number
+  cache_creation_input_token_cost: number
+  cache_creation_input_token_cost_priority: number
+  cache_creation_input_token_cost_above_1hr: number
+  cache_read_input_token_cost: number
+  cache_read_input_token_cost_priority: number
+  output_cost_per_image: number
+  output_cost_per_image_token: number
+  input_cost_per_image_token: number
+  long_context_input_token_threshold: number
+  long_context_input_cost_multiplier: number
+  long_context_output_cost_multiplier: number
+  supports_prompt_caching: boolean
+  supports_service_tier: boolean
+  token_pricing_absent: boolean
+  overridden: boolean
+  wildcard: boolean
+  override?: Record<string, unknown>
+}
+
+export interface ModelPricingCatalog {
+  items: ModelPricingCatalogEntry[]
+  model_count: number
+  override_count: number
+  last_updated: string
+  override_file: string
+}
+
+export async function listModelPricingCatalog(): Promise<ModelPricingCatalog> {
+  const { data } = await apiClient.get<ModelPricingCatalog>('/admin/channels/pricing-catalog')
+  return data
+}
+
+export async function saveModelPricingOverride(
+  model: string,
+  pricing: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put('/admin/channels/pricing-catalog', { model, pricing })
+}
+
+export async function deleteModelPricingOverride(model: string): Promise<void> {
+  await apiClient.delete('/admin/channels/pricing-catalog', { data: { model } })
+}
+
+export async function refreshModelPricingCatalog(): Promise<ModelPricingCatalog> {
+  const { data } = await apiClient.post<ModelPricingCatalog>('/admin/channels/pricing-catalog/refresh')
+  return data
+}
+
+const channelsAPI = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  getModelDefaultPricing,
+  syncPricingModels,
+  listModelPricingCatalog,
+  saveModelPricingOverride,
+  deleteModelPricingOverride,
+  refreshModelPricingCatalog
+}
 export default channelsAPI

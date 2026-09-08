@@ -75,6 +75,15 @@ type channelModelPricingRequest struct {
 	TimePricing                  *channelTimePricingRequest `json:"time_pricing"`
 }
 
+type modelPricingOverrideRequest struct {
+	Model   string         `json:"model" binding:"required"`
+	Pricing map[string]any `json:"pricing" binding:"required"`
+}
+
+type deleteModelPricingOverrideRequest struct {
+	Model string `json:"model" binding:"required"`
+}
+
 type channelTimePricingRequest struct {
 	Timezone     string                            `json:"timezone"`
 	WeekdaysOnly bool                              `json:"weekdays_only"`
@@ -665,4 +674,68 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 
 	models := h.pricingService.ListModelNamesByProvider(provider)
 	response.Success(c, gin.H{"models": models})
+}
+
+// ListModelPricingCatalog returns the effective global model pricing catalog.
+// GET /api/v1/admin/channels/pricing-catalog
+func (h *ChannelHandler) ListModelPricingCatalog(c *gin.Context) {
+	catalog, err := h.pricingService.ListAdminModelPricing()
+	if err != nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_CATALOG_READ_FAILED", err.Error()))
+		return
+	}
+	response.Success(c, catalog)
+}
+
+// SaveModelPricingOverride creates or updates a local global pricing override.
+// PUT /api/v1/admin/channels/pricing-catalog
+func (h *ChannelHandler) SaveModelPricingOverride(c *gin.Context) {
+	var req modelPricingOverrideRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_PRICING_OVERRIDE", "model and pricing are required"))
+		return
+	}
+	if err := h.pricingService.UpsertPricingOverride(req.Model, req.Pricing); err != nil {
+		if service.IsPricingOverrideValidationError(err) {
+			response.ErrorFrom(c, infraerrors.BadRequest("INVALID_PRICING_OVERRIDE", err.Error()))
+			return
+		}
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_OVERRIDE_SAVE_FAILED", err.Error()))
+		return
+	}
+	response.Success(c, gin.H{"message": "pricing override saved"})
+}
+
+// DeleteModelPricingOverride removes a local override and restores catalog pricing.
+// DELETE /api/v1/admin/channels/pricing-catalog
+func (h *ChannelHandler) DeleteModelPricingOverride(c *gin.Context) {
+	var req deleteModelPricingOverrideRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_PRICING_OVERRIDE", "model is required"))
+		return
+	}
+	if err := h.pricingService.DeletePricingOverride(req.Model); err != nil {
+		if service.IsPricingOverrideValidationError(err) {
+			response.ErrorFrom(c, infraerrors.BadRequest("INVALID_PRICING_OVERRIDE", err.Error()))
+			return
+		}
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_OVERRIDE_DELETE_FAILED", err.Error()))
+		return
+	}
+	response.Success(c, gin.H{"message": "pricing override deleted"})
+}
+
+// RefreshModelPricingCatalog downloads the latest remote catalog and reapplies overrides.
+// POST /api/v1/admin/channels/pricing-catalog/refresh
+func (h *ChannelHandler) RefreshModelPricingCatalog(c *gin.Context) {
+	if err := h.pricingService.ForceUpdate(); err != nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_CATALOG_REFRESH_FAILED", err.Error()))
+		return
+	}
+	catalog, err := h.pricingService.ListAdminModelPricing()
+	if err != nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_CATALOG_READ_FAILED", err.Error()))
+		return
+	}
+	response.Success(c, catalog)
 }
