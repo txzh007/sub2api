@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ const adminPricingCatalogJSON = `{
 	"qwen3-max": {
 		"litellm_provider": "dashscope",
 		"mode": "chat",
+		"deprecation_date": "2999-12-31",
 		"input_cost_per_token": 0.000002,
 		"output_cost_per_token": 0.000008,
 		"supports_prompt_caching": true
@@ -22,6 +24,7 @@ const adminPricingCatalogJSON = `{
 	"gpt-5": {
 		"litellm_provider": "openai",
 		"mode": "chat",
+		"deprecation_date": "2000-01-01",
 		"input_cost_per_token": 0.00000125,
 		"output_cost_per_token": 0.00001
 	}
@@ -55,8 +58,26 @@ func TestListAdminModelPricingReturnsCatalogMetadata(t *testing.T) {
 	catalog, err := svc.ListAdminModelPricing()
 	require.NoError(t, err)
 	require.Equal(t, 2, catalog.ModelCount)
+	require.Equal(t, 1, catalog.ActiveModelCount)
+	require.Equal(t, 1, catalog.DeprecatedModelCount)
 	require.Equal(t, 0, catalog.OverrideCount)
 	require.Len(t, catalog.Items, 2)
+	require.Equal(t, "gpt-5", catalog.Items[0].Model)
+	require.True(t, catalog.Items[0].Deprecated)
+	require.Equal(t, "2000-01-01", catalog.Items[0].DeprecationDate)
+	require.Equal(t, "qwen3-max", catalog.Items[1].Model)
+	require.False(t, catalog.Items[1].Deprecated)
+	require.Equal(t, "2999-12-31", catalog.Items[1].DeprecationDate)
+}
+
+func TestIsModelDeprecatedOn(t *testing.T) {
+	now := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+
+	require.True(t, isModelDeprecatedOn("2026-09-07", now))
+	require.True(t, isModelDeprecatedOn("2026-09-08", now))
+	require.False(t, isModelDeprecatedOn("2026-09-09", now))
+	require.False(t, isModelDeprecatedOn("", now))
+	require.False(t, isModelDeprecatedOn("September 8, 2026", now))
 }
 
 func TestUpsertPricingOverrideAppliesImmediatelyAndPreservesFields(t *testing.T) {

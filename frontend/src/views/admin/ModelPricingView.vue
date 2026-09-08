@@ -40,7 +40,10 @@
             <div class="ledger-stat">
               <span class="ledger-label">{{ t('admin.modelPricing.totalModels') }}</span>
               <strong>{{ catalog?.model_count ?? 0 }}</strong>
-              <span>{{ t('admin.modelPricing.effectiveCatalog') }}</span>
+              <span>{{ t('admin.modelPricing.modelCoverage', {
+                active: catalog?.active_model_count ?? 0,
+                deprecated: catalog?.deprecated_model_count ?? 0
+              }) }}</span>
             </div>
             <div class="ledger-stat ledger-stat-accent">
               <span class="ledger-label">{{ t('admin.modelPricing.localOverrides') }}</span>
@@ -69,6 +72,7 @@
                 :placeholder="t('admin.modelPricing.searchPlaceholder')"
               />
             </div>
+            <Select v-model="lifecycleFilter" class="w-full lg:w-52" :options="lifecycleOptions" />
             <Select v-model="sourceFilter" class="w-full lg:w-44" :options="sourceOptions" />
             <Select v-model="modeFilter" class="w-full lg:w-44" :options="modeOptions" />
             <div class="ml-auto text-xs text-gray-500 dark:text-gray-400">
@@ -85,6 +89,7 @@
               <div class="flex items-center gap-2">
                 <code class="font-semibold text-gray-900 dark:text-gray-100">{{ row.model }}</code>
                 <span v-if="row.wildcard" class="rule-badge">{{ t('admin.modelPricing.prefixRule') }}</span>
+                <span v-if="row.deprecated" class="deprecated-badge">{{ t('admin.modelPricing.deprecated') }}</span>
               </div>
               <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>{{ row.litellm_provider || t('admin.modelPricing.unknownProvider') }}</span>
@@ -92,6 +97,9 @@
                 <span>{{ row.mode || 'chat' }}</span>
                 <span>·</span>
                 <span class="font-semibold">{{ resolvePricingCurrency(row.litellm_provider, row.model) }}</span>
+              </div>
+              <div v-if="row.deprecation_date" class="mt-1 text-xs" :class="row.deprecated ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">
+                {{ t('admin.modelPricing.deprecationDate', { date: row.deprecation_date }) }}
               </div>
             </div>
           </template>
@@ -258,6 +266,10 @@ import {
   storedPriceToDisplay,
   type PricingCurrency
 } from '@/utils/pricingCurrency'
+import {
+  matchesModelPricingLifecycle,
+  type ModelPricingLifecycleFilter
+} from '@/utils/modelPricingLifecycle'
 import type { Column } from '@/components/common/types'
 
 const { t, locale } = useI18n()
@@ -323,6 +335,7 @@ const loading = ref(false)
 const refreshing = ref(false)
 const saving = ref(false)
 const search = ref('')
+const lifecycleFilter = ref<ModelPricingLifecycleFilter>('active')
 const sourceFilter = ref<string | number | boolean | null>('all')
 const modeFilter = ref<string | number | boolean | null>('all')
 const page = ref(1)
@@ -351,6 +364,11 @@ const sourceOptions = computed(() => [
   { value: 'override', label: t('admin.modelPricing.sourceOverride') },
   { value: 'catalog', label: t('admin.modelPricing.sourceCatalog') }
 ])
+const lifecycleOptions = computed(() => [
+  { value: 'active', label: t('admin.modelPricing.filters.activeOnly') },
+  { value: 'all', label: t('admin.modelPricing.filters.allLifecycles') },
+  { value: 'deprecated', label: t('admin.modelPricing.filters.deprecatedOnly') }
+])
 const modeOptions = computed(() => {
   const modes = [...new Set((catalog.value?.items || []).map(item => item.mode || 'chat'))].sort()
   return [{ value: 'all', label: t('admin.modelPricing.filters.allModes') }, ...modes.map(value => ({ value, label: value }))]
@@ -359,6 +377,7 @@ const modeOptions = computed(() => {
 const filteredItems = computed(() => {
   const query = search.value.trim().toLowerCase()
   return (catalog.value?.items || []).filter(item => {
+    if (!matchesModelPricingLifecycle(item, lifecycleFilter.value)) return false
     if (sourceFilter.value === 'override' && !item.overridden) return false
     if (sourceFilter.value === 'catalog' && item.overridden) return false
     if (modeFilter.value !== 'all' && (item.mode || 'chat') !== modeFilter.value) return false
@@ -367,9 +386,9 @@ const filteredItems = computed(() => {
   })
 })
 const pagedItems = computed(() => filteredItems.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
-const unpricedCount = computed(() => (catalog.value?.items || []).filter(isTokenPriceMissing).length)
+const unpricedCount = computed(() => (catalog.value?.items || []).filter(item => !item.deprecated && isTokenPriceMissing(item)).length)
 
-watch([search, sourceFilter, modeFilter], () => { page.value = 1 })
+watch([search, lifecycleFilter, sourceFilter, modeFilter], () => { page.value = 1 })
 
 function isTokenPriceMissing(item: ModelPricingCatalogEntry) {
   const mediaMode = ['image_generation', 'image', 'audio', 'video'].includes(item.mode)
@@ -571,8 +590,13 @@ onMounted(loadCatalog)
 }
 
 .rule-badge,
+.deprecated-badge,
 .unit-chip {
   @apply inline-flex rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300;
+}
+
+.deprecated-badge {
+  @apply inline-flex rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300;
 }
 
 .unit-chip {

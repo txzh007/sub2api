@@ -208,6 +208,8 @@ export interface ModelPricingCatalogEntry {
   model: string
   litellm_provider: string
   mode: string
+  deprecation_date?: string
+  deprecated: boolean
   input_cost_per_token: number
   input_cost_per_token_priority: number
   output_cost_per_token: number
@@ -234,6 +236,8 @@ export interface ModelPricingCatalogEntry {
 export interface ModelPricingCatalog {
   items: ModelPricingCatalogEntry[]
   model_count: number
+  active_model_count: number
+  deprecated_model_count: number
   override_count: number
   last_updated: string
   override_file: string

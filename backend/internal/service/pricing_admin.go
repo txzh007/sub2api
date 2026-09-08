@@ -19,6 +19,8 @@ type ModelPricingCatalogEntry struct {
 	Model                               string         `json:"model"`
 	LiteLLMProvider                     string         `json:"litellm_provider"`
 	Mode                                string         `json:"mode"`
+	DeprecationDate                     string         `json:"deprecation_date,omitempty"`
+	Deprecated                          bool           `json:"deprecated"`
 	InputCostPerToken                   float64        `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64        `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  float64        `json:"output_cost_per_token"`
@@ -43,11 +45,29 @@ type ModelPricingCatalogEntry struct {
 }
 
 type ModelPricingCatalog struct {
-	Items         []ModelPricingCatalogEntry `json:"items"`
-	ModelCount    int                        `json:"model_count"`
-	OverrideCount int                        `json:"override_count"`
-	LastUpdated   time.Time                  `json:"last_updated"`
-	OverrideFile  string                     `json:"override_file"`
+	Items                []ModelPricingCatalogEntry `json:"items"`
+	ModelCount           int                        `json:"model_count"`
+	ActiveModelCount     int                        `json:"active_model_count"`
+	DeprecatedModelCount int                        `json:"deprecated_model_count"`
+	OverrideCount        int                        `json:"override_count"`
+	LastUpdated          time.Time                  `json:"last_updated"`
+	OverrideFile         string                     `json:"override_file"`
+}
+
+const modelDeprecationDateLayout = "2006-01-02"
+
+func isModelDeprecatedOn(deprecationDate string, now time.Time) bool {
+	deprecationDate = strings.TrimSpace(deprecationDate)
+	if deprecationDate == "" {
+		return false
+	}
+	location := now.Location()
+	deprecation, err := time.ParseInLocation(modelDeprecationDateLayout, deprecationDate, location)
+	if err != nil {
+		return false
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	return !deprecation.After(today)
 }
 
 // PricingOverrideValidationError marks a user-editable pricing payload error.
@@ -290,13 +310,20 @@ func (s *PricingService) ListAdminModelPricing() (*ModelPricingCatalog, error) {
 
 	s.mu.RLock()
 	items := make([]ModelPricingCatalogEntry, 0, len(s.pricingData))
+	now := time.Now()
+	deprecatedModelCount := 0
 	for model, p := range s.pricingData {
 		if p == nil {
 			continue
 		}
 		_, overridden := overrides[model]
+		deprecated := isModelDeprecatedOn(p.DeprecationDate, now)
+		if deprecated {
+			deprecatedModelCount++
+		}
 		items = append(items, ModelPricingCatalogEntry{
 			Model: model, LiteLLMProvider: p.LiteLLMProvider, Mode: p.Mode,
+			DeprecationDate: p.DeprecationDate, Deprecated: deprecated,
 			InputCostPerToken: p.InputCostPerToken, InputCostPerTokenPriority: p.InputCostPerTokenPriority,
 			OutputCostPerToken: p.OutputCostPerToken, OutputCostPerTokenPriority: p.OutputCostPerTokenPriority,
 			CacheCreationInputTokenCost:         p.CacheCreationInputTokenCost,
@@ -318,7 +345,8 @@ func (s *PricingService) ListAdminModelPricing() (*ModelPricingCatalog, error) {
 	s.mu.RUnlock()
 	sort.Slice(items, func(i, j int) bool { return strings.ToLower(items[i].Model) < strings.ToLower(items[j].Model) })
 	return &ModelPricingCatalog{
-		Items: items, ModelCount: len(items), OverrideCount: len(overrides),
+		Items: items, ModelCount: len(items), ActiveModelCount: len(items) - deprecatedModelCount,
+		DeprecatedModelCount: deprecatedModelCount, OverrideCount: len(overrides),
 		LastUpdated: lastUpdated, OverrideFile: path,
 	}, nil
 }

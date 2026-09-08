@@ -140,6 +140,7 @@ type LiteLLMModelPricing struct {
 	SupportsServiceTier                 bool    `json:"supports_service_tier"`
 	LiteLLMProvider                     string  `json:"litellm_provider"`
 	Mode                                string  `json:"mode"`
+	DeprecationDate                     string  `json:"deprecation_date,omitempty"`
 	SupportsPromptCaching               bool    `json:"supports_prompt_caching"`
 	OutputCostPerImage                  float64 `json:"output_cost_per_image"`       // 图片生成模型每张图片价格
 	OutputCostPerImageToken             float64 `json:"output_cost_per_image_token"` // 图片输出 token 价格
@@ -174,6 +175,7 @@ type LiteLLMRawEntry struct {
 	SupportsServiceTier                 bool     `json:"supports_service_tier"`
 	LiteLLMProvider                     string   `json:"litellm_provider"`
 	Mode                                string   `json:"mode"`
+	DeprecationDate                     string   `json:"deprecation_date"`
 	SupportsPromptCaching               bool     `json:"supports_prompt_caching"`
 	OutputCostPerImage                  *float64 `json:"output_cost_per_image"`
 	OutputCostPerImageToken             *float64 `json:"output_cost_per_image_token"`
@@ -597,6 +599,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		pricing := &LiteLLMModelPricing{
 			LiteLLMProvider:       entry.LiteLLMProvider,
 			Mode:                  entry.Mode,
+			DeprecationDate:       strings.TrimSpace(entry.DeprecationDate),
 			SupportsPromptCaching: entry.SupportsPromptCaching,
 			SupportsServiceTier:   entry.SupportsServiceTier,
 			TokenPricingAbsent:    entry.InputCostPerToken == nil && entry.OutputCostPerToken == nil,
