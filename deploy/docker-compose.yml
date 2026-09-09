@@ -15,7 +15,7 @@ services:
   # ===========================================================================
   # Sub2API Application
   # ===========================================================================
-  sub2api:
+  sub2api: &sub2api-app
     image: weishaw/sub2api:latest
     container_name: sub2api
     restart: unless-stopped
@@ -225,6 +225,22 @@ services:
       # The application also retries transient database startup errors. This
       # grace period keeps Compose from declaring it unhealthy during bootstrap.
       start_period: 120s
+
+  # ==========================================================================
+  # TToken blue-green candidate
+  # Start explicitly with:
+  #   docker compose --profile ttoken-green up -d ttoken-green
+  # It shares the existing database, Redis, network, and /app/data volume while
+  # publishing a separate loopback-only host port for an Nginx cutover.
+  # ==========================================================================
+  ttoken-green:
+    <<: *sub2api-app
+    image: ghcr.io/txzh007/ttoken:0.2.0
+    platform: linux/amd64
+    container_name: ttoken-green
+    profiles: ["ttoken-green"]
+    ports:
+      - "${TTOKEN_BIND_HOST:-127.0.0.1}:${TTOKEN_HOST_PORT:-18080}:8080"
 
   # ===========================================================================
   # PostgreSQL Database
