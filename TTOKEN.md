@@ -19,7 +19,7 @@ accepted by the build tooling for compatibility.
 
 Pushing a `ttoken-vX.Y.Z` tag runs the independent TToken release workflow. It
 requires the tag version to match `backend/cmd/server/TTOKEN_VERSION`, runs the
-full CI workflow, and publishes multi-architecture images as
+full CI workflow, and publishes a Linux AMD64 image as
 `ghcr.io/txzh007/ttoken:X.Y.Z` and `ghcr.io/txzh007/ttoken:latest`. The upstream
 `backend/cmd/server/VERSION` file is not modified.
 
