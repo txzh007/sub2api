@@ -55,8 +55,8 @@ type Group struct {
 	VideoPrice480P               *float64
 	VideoPrice720P               *float64
 	VideoPrice1080P              *float64
-	// VideoModelPrices is optional per-model-family per-second pricing
-	// (groups.video_model_prices JSONB). Shape: family → resolution → USD/s.
+	// VideoModelPrices is optional per-model-family per-request pricing
+	// (groups.video_model_prices JSONB). Shape: family → resolution → USD/request.
 	// When set for a model, overrides VideoPrice* for that model only.
 	VideoModelPrices map[string]map[string]float64
 	// Codex alpha/search 网页搜索单次价格（USD/次，仅 openai 平台使用）；

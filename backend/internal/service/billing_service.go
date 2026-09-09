@@ -262,17 +262,18 @@ func resolvedChannelTimeMultiplier(resolved *ResolvedPricing, at time.Time) floa
 // sources can price the requested model.
 var ErrModelPricingUnavailable = errors.New("pricing not found")
 
-// ---- DeepSeek 官方低谷价（$/token，2026-08-23 起生效）----
+// ---- DeepSeek 官方低谷价（内部余额单位/token，2026-08-23 起生效）----
 // Source: https://api-docs.deepseek.com/quick_start/pricing
+// 国模价格按人民币价目表的数字直接进入内部余额，不做美元汇率换算。
 // 高峰价 = 2× 低谷价；高峰时段 01:00–04:00 与 06:00–10:00 UTC（仅工作日），
 // 北京时间周六/周日全天低谷。时段判定见 deepseekPeakMultiplierAt。
 const (
-	deepseekFlashOffPeakInputPrice  = 2.2e-7  // $0.22 per MTok (cache miss)
-	deepseekFlashOffPeakOutputPrice = 6.6e-7  // $0.66 per MTok
-	deepseekFlashOffPeakCacheRead   = 7e-9    // $0.007 per MTok (cache hit)
-	deepseekProOffPeakInputPrice    = 6.6e-7  // $0.66 per MTok (cache miss)
-	deepseekProOffPeakOutputPrice   = 1.98e-6 // $1.98 per MTok
-	deepseekProOffPeakCacheRead     = 2.2e-8  // $0.022 per MTok (cache hit)
+	deepseekFlashOffPeakInputPrice  = 1.5e-6  // ¥1.5 per MTok (cache miss)
+	deepseekFlashOffPeakOutputPrice = 4.5e-6  // ¥4.5 per MTok
+	deepseekFlashOffPeakCacheRead   = 2.5e-8  // ¥0.025 per MTok (cache hit)
+	deepseekProOffPeakInputPrice    = 4.5e-6  // ¥4.5 per MTok (cache miss)
+	deepseekProOffPeakOutputPrice   = 13.5e-6 // ¥13.5 per MTok
+	deepseekProOffPeakCacheRead     = 7.5e-8  // ¥0.075 per MTok (cache hit)
 )
 
 // isDeepSeekModel 判断模型名是否为 DeepSeek 模型（大小写不敏感）。
@@ -568,15 +569,15 @@ func (s *BillingService) initFallbackPricing() {
 	// 以下均为官方低谷价；高峰价 = 2× 低谷价（高峰时段 01:00–04:00
 	// 与 06:00–10:00 UTC，仅工作日；北京时间周六/周日全天低谷），见 deepseekPeakMultiplierAt。
 	s.fallbackPrices["deepseek-v4-pro"] = &ModelPricing{
-		InputPricePerToken:     deepseekProOffPeakInputPrice,  // $0.66 per MTok (cache miss, off-peak)
-		OutputPricePerToken:    deepseekProOffPeakOutputPrice, // $1.98 per MTok
-		CacheReadPricePerToken: deepseekProOffPeakCacheRead,   // $0.022 per MTok (cache hit)
+		InputPricePerToken:     deepseekProOffPeakInputPrice,  // ¥4.5 per MTok (cache miss, off-peak)
+		OutputPricePerToken:    deepseekProOffPeakOutputPrice, // ¥13.5 per MTok
+		CacheReadPricePerToken: deepseekProOffPeakCacheRead,   // ¥0.075 per MTok (cache hit)
 		SupportsCacheBreakdown: false,
 	}
 	s.fallbackPrices["deepseek-v4-flash"] = &ModelPricing{
-		InputPricePerToken:     deepseekFlashOffPeakInputPrice,  // $0.22 per MTok (cache miss, off-peak)
-		OutputPricePerToken:    deepseekFlashOffPeakOutputPrice, // $0.66 per MTok
-		CacheReadPricePerToken: deepseekFlashOffPeakCacheRead,   // $0.007 per MTok (cache hit)
+		InputPricePerToken:     deepseekFlashOffPeakInputPrice,  // ¥1.5 per MTok (cache miss, off-peak)
+		OutputPricePerToken:    deepseekFlashOffPeakOutputPrice, // ¥4.5 per MTok
+		CacheReadPricePerToken: deepseekFlashOffPeakCacheRead,   // ¥0.025 per MTok (cache hit)
 		SupportsCacheBreakdown: false,
 	}
 	s.fallbackPrices["deepseek-v4-flash-vision-exp"] = &ModelPricing{
@@ -1869,12 +1870,12 @@ type ImagePriceConfig struct {
 	Price4K *float64 // 4K 尺寸价格（nil 表示使用默认值）
 }
 
-// VideoPriceConfig 视频生成计费配置。所有价格均为**每秒**单价（USD/s），与 xAI 官方计费口径一致。
+// VideoPriceConfig 视频生成计费配置。所有价格均为单个视频的价格（USD/次）。
 type VideoPriceConfig struct {
-	Price480P  *float64 // 480p 每秒价格（nil 表示使用默认值）
-	Price720P  *float64 // 720p 每秒价格（nil 表示使用默认值）
-	Price1080P *float64 // 1080p 每秒价格（nil 表示使用默认值）
-	// ModelPrices is optional per-model-family override: family → resolution → USD/s.
+	Price480P  *float64 // 480p 每次价格（nil 表示使用默认值）
+	Price720P  *float64 // 720p 每次价格（nil 表示使用默认值）
+	Price1080P *float64 // 1080p 每次价格（nil 表示使用默认值）
+	// ModelPrices is optional per-model-family override: family → resolution → USD/request.
 	// When set for a model, it wins over Price* flat columns for that model only.
 	ModelPrices map[string]map[string]float64
 }
@@ -1889,12 +1890,13 @@ const (
 	defaultGrokImagineImage20Price1K      = 0.06 // default quality is Medium
 	defaultGrokImagineImage20Price2K      = 0.08
 
-	// 视频默认价为 xAI 官方**每秒**输出价格（USD/s），总价 = 每秒价 × 时长（秒）。
-	defaultGrokImagineVideoPrice480P    = 0.05
-	defaultGrokImagineVideoPrice720P    = 0.07
-	defaultGrokImagineVideo15Price480P  = 0.08
-	defaultGrokImagineVideo15Price720P  = 0.14
-	defaultGrokImagineVideo15Price1080P = 0.25
+	// 视频按次计费。默认值按此前官方每秒价 × 上游默认 8 秒折算，
+	// 使默认时长请求切换计费方式后金额保持不变。
+	defaultGrokImagineVideoPrice480P    = 0.40
+	defaultGrokImagineVideoPrice720P    = 0.56
+	defaultGrokImagineVideo15Price480P  = 0.64
+	defaultGrokImagineVideo15Price720P  = 1.12
+	defaultGrokImagineVideo15Price1080P = 2.00
 
 	// Codex alpha/search 网页搜索单次默认价：OpenAI 官方 web search 定价 $10/1000 次。
 	defaultWebSearchPricePerCall = 0.01
@@ -2039,22 +2041,21 @@ func (s *BillingService) CalculateImageCost(model string, imageSize string, imag
 	}
 }
 
-// CalculateVideoCost 计算视频生成费用（按秒计费，与 xAI 口径一致）。
+// CalculateVideoCost 计算视频生成费用（按生成视频数量计费）。
 // model: 请求的模型名称（用于获取默认价格）
 // resolution: 视频分辨率 "480p", "720p", "1080p"
 // videoCount: 生成的视频数量
-// durationSeconds: 单个视频时长（秒），<=0 时按上游默认时长计
-// groupConfig: 分组配置的每秒价格（可能为 nil，表示使用默认值）
+// durationSeconds: 单个视频时长（秒），仅用于用量元数据，不参与计费
+// groupConfig: 分组配置的每次价格（可能为 nil，表示使用默认值）
 // rateMultiplier: 费率倍数
 func (s *BillingService) CalculateVideoCost(model string, resolution string, videoCount int, durationSeconds int, groupConfig *VideoPriceConfig, rateMultiplier float64) *CostBreakdown {
 	if videoCount <= 0 {
 		return &CostBreakdown{}
 	}
 	resolution = NormalizeVideoBillingResolutionOrDefault(resolution)
-	durationSeconds = NormalizeVideoBillingDurationSecondsOrDefault(durationSeconds)
-
-	perSecondPrice := s.getVideoUnitPrice(model, resolution, groupConfig)
-	totalCost := perSecondPrice * float64(durationSeconds) * float64(videoCount)
+	_ = durationSeconds
+	perRequestPrice := s.getVideoUnitPrice(model, resolution, groupConfig)
+	totalCost := perRequestPrice * float64(videoCount)
 
 	if rateMultiplier < 0 {
 		rateMultiplier = 0
@@ -2150,14 +2151,18 @@ func (s *BillingService) getDefaultImagePrice(model string, imageSize string) fl
 }
 
 func (s *BillingService) getDefaultVideoPrice(model string, resolution string) float64 {
+	// 管理员价格目录覆盖优先于内置价格；视频目录价是每个视频的价格。
+	if s.pricingService != nil {
+		pricing := s.pricingService.GetModelPricing(model)
+		if pricing != nil && pricing.OutputCostPerVideo > 0 {
+			return pricing.OutputCostPerVideo
+		}
+	}
 	if price, ok := getDefaultGrokImagineVideoPrice(model, resolution); ok {
 		return price
 	}
 
-	// The bundled LiteLLM schema does not expose an output video generation price.
-	// Keep the historical model default as the fallback (interpreted as a per-second
-	// rate; today only Grok models reach video billing, so this path is a safety net),
-	// while letting group-level video prices override it independently from image prices.
+	// Unknown future video models use the historical image fallback as a safety net.
 	return s.getDefaultImagePrice(model, ImageBillingSize2K)
 }
 
@@ -2199,9 +2204,8 @@ func getGrokImagineImageTierPrice(imageSize string, price1K float64, price2K flo
 }
 
 func getDefaultGrokImagineVideoPrice(model string, resolution string) (float64, bool) {
-	model = strings.ToLower(strings.TrimSpace(model))
-	switch {
-	case strings.HasPrefix(model, "grok-imagine-video-1.5"):
+	switch CanonicalGrokImagineVideoPriceFamily(model) {
+	case VideoPriceFamilyGrokImagineVideo15:
 		switch NormalizeVideoBillingResolutionOrDefault(resolution) {
 		case VideoBillingResolution480P:
 			return defaultGrokImagineVideo15Price480P, true
@@ -2212,7 +2216,7 @@ func getDefaultGrokImagineVideoPrice(model string, resolution string) (float64, 
 		default:
 			return defaultGrokImagineVideo15Price480P, true
 		}
-	case strings.HasPrefix(model, "grok-imagine-video"):
+	case VideoPriceFamilyGrokImagineVideo:
 		switch NormalizeVideoBillingResolutionOrDefault(resolution) {
 		case VideoBillingResolution480P:
 			return defaultGrokImagineVideoPrice480P, true

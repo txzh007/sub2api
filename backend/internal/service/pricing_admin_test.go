@@ -70,6 +70,28 @@ func TestListAdminModelPricingReturnsCatalogMetadata(t *testing.T) {
 	require.Equal(t, "2999-12-31", catalog.Items[1].DeprecationDate)
 }
 
+func TestAdminVideoPricingOverrideAppearsInCatalog(t *testing.T) {
+	svc, _, _ := newAdminPricingService(t)
+	require.NoError(t, svc.UpsertPricingOverride("grok-imagine-video", map[string]any{
+		"litellm_provider":      "xai",
+		"mode":                  "video",
+		"output_cost_per_video": 0.40,
+	}))
+
+	catalog, err := svc.ListAdminModelPricing()
+	require.NoError(t, err)
+	var found *ModelPricingCatalogEntry
+	for i := range catalog.Items {
+		if catalog.Items[i].Model == "grok-imagine-video" {
+			found = &catalog.Items[i]
+			break
+		}
+	}
+	require.NotNil(t, found)
+	require.InDelta(t, 0.40, found.OutputCostPerVideo, 1e-12)
+	require.Equal(t, "video", found.Mode)
+}
+
 func TestIsModelDeprecatedOn(t *testing.T) {
 	now := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 

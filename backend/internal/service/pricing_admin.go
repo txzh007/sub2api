@@ -31,6 +31,7 @@ type ModelPricingCatalogEntry struct {
 	CacheReadInputTokenCost             float64        `json:"cache_read_input_token_cost"`
 	CacheReadInputTokenCostPriority     float64        `json:"cache_read_input_token_cost_priority"`
 	OutputCostPerImage                  float64        `json:"output_cost_per_image"`
+	OutputCostPerVideo                  float64        `json:"output_cost_per_video"`
 	OutputCostPerImageToken             float64        `json:"output_cost_per_image_token"`
 	InputCostPerImageToken              float64        `json:"input_cost_per_image_token"`
 	LongContextInputTokenThreshold      int            `json:"long_context_input_token_threshold"`
@@ -91,6 +92,7 @@ var pricingCostFields = map[string]struct{}{
 	"cache_read_input_token_cost":               {},
 	"cache_read_input_token_cost_priority":      {},
 	"output_cost_per_image":                     {},
+	"output_cost_per_video":                     {},
 	"output_cost_per_image_token":               {},
 	"input_cost_per_image_token":                {},
 }
@@ -331,7 +333,8 @@ func (s *PricingService) ListAdminModelPricing() (*ModelPricingCatalog, error) {
 			CacheCreationInputTokenCostAbove1hr: p.CacheCreationInputTokenCostAbove1hr,
 			CacheReadInputTokenCost:             p.CacheReadInputTokenCost,
 			CacheReadInputTokenCostPriority:     p.CacheReadInputTokenCostPriority,
-			OutputCostPerImage:                  p.OutputCostPerImage, OutputCostPerImageToken: p.OutputCostPerImageToken,
+			OutputCostPerImage:                  p.OutputCostPerImage, OutputCostPerVideo: p.OutputCostPerVideo,
+			OutputCostPerImageToken:         p.OutputCostPerImageToken,
 			InputCostPerImageToken:          p.InputCostPerImageToken,
 			LongContextInputTokenThreshold:  p.LongContextInputTokenThreshold,
 			LongContextInputCostMultiplier:  p.LongContextInputCostMultiplier,

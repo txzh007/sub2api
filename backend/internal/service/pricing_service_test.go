@@ -422,6 +422,25 @@ func TestParsePricingData_KeepsImageOnlyPricing(t *testing.T) {
 	require.True(t, pricing.TokenPricingAbsent)
 }
 
+func TestParsePricingData_KeepsVideoOnlyPricing(t *testing.T) {
+	svc := &PricingService{}
+	body := []byte(`{
+		"grok-imagine-video": {
+			"output_cost_per_video": 0.40,
+			"litellm_provider": "xai",
+			"mode": "video"
+		}
+	}`)
+
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	pricing := data["grok-imagine-video"]
+	require.NotNil(t, pricing)
+	require.InDelta(t, 0.40, pricing.OutputCostPerVideo, 1e-12)
+	require.Equal(t, "video", pricing.Mode)
+	require.True(t, pricing.TokenPricingAbsent)
+}
+
 func TestBillingService_GetModelPricing_FailsClosedForImageOnlyEntries(t *testing.T) {
 	pricingSvc := &PricingService{}
 	data, err := pricingSvc.parsePricingData([]byte(`{

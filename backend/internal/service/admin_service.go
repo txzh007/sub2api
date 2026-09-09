@@ -264,7 +264,7 @@ type CreateGroupInput struct {
 	VideoPrice480P     *float64
 	VideoPrice720P     *float64
 	VideoPrice1080P    *float64
-	// VideoModelPrices 可选按模型族×分辨率覆盖视频每秒单价。
+	// VideoModelPrices 可选按模型族×分辨率覆盖视频每次单价。
 	VideoModelPrices map[string]map[string]float64
 	// Codex alpha/search 网页搜索单次价格（USD/次，仅 openai 平台使用）；nil/负数按默认价 0.01 处理
 	WebSearchPricePerCall *float64

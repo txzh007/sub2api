@@ -40,16 +40,15 @@ const defaultImagePricePlaceholders: Record<
   },
 };
 
-// 视频价为每秒单价（USD/s）。480p/720p 取 grok-imagine-video（文生视频实际走该模型）的
-// 官方每秒价；1080p 仅 grok-imagine-video-1.5 图生视频支持，取 1.5 的每秒价。
+// 视频按次计费。默认值按原每秒价乘以上游默认 8 秒折算，避免默认请求切换后价格跳变。
 const defaultVideoPricePlaceholders: Record<
   string,
   Record<VideoPricingTierKey, string>
 > = {
   grok: {
-    video_price_480p: "0.05",
-    video_price_720p: "0.07",
-    video_price_1080p: "0.25",
+    video_price_480p: "0.40",
+    video_price_720p: "0.56",
+    video_price_1080p: "2.00",
   },
 };
 

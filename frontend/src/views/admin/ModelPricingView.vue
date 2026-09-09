@@ -109,10 +109,10 @@
           </template>
 
           <template #cell-input_cost_per_token="{ row }">
-            <PriceCell :value="row.input_cost_per_token" :provider="row.litellm_provider" :model="row.model" :missing="isTokenPriceMissing(row)" />
+            <PriceCell :value="row.input_cost_per_token" :provider="row.litellm_provider" :model="row.model" :missing="isPricingMissing(row)" />
           </template>
           <template #cell-output_cost_per_token="{ row }">
-            <PriceCell :value="row.output_cost_per_token" :provider="row.litellm_provider" :model="row.model" :missing="isTokenPriceMissing(row)" />
+            <PriceCell :value="row.output_cost_per_token" :provider="row.litellm_provider" :model="row.model" :missing="isPricingMissing(row)" />
           </template>
           <template #cell-cache_creation_input_token_cost="{ row }">
             <PriceCell :value="row.cache_creation_input_token_cost" :provider="row.litellm_provider" :model="row.model" />
@@ -122,7 +122,12 @@
           </template>
           <template #cell-output_cost_per_image="{ row }">
             <span class="font-mono text-sm tabular-nums text-gray-700 dark:text-gray-300">
-              {{ formatImagePrice(row.output_cost_per_image, row) }}
+              {{ formatMediaPrice(row.output_cost_per_image, row) }}
+            </span>
+          </template>
+          <template #cell-output_cost_per_video="{ row }">
+            <span class="font-mono text-sm tabular-nums text-gray-700 dark:text-gray-300">
+              {{ formatMediaPrice(row.output_cost_per_video, row) }}
             </span>
           </template>
           <template #cell-source="{ row }">
@@ -315,6 +320,7 @@ type PriceKey =
   | 'cache_creation_input_token_cost_priority'
   | 'cache_read_input_token_cost_priority'
   | 'output_cost_per_image'
+  | 'output_cost_per_video'
   | 'input_cost_per_image_token'
   | 'output_cost_per_image_token'
 
@@ -334,6 +340,7 @@ const advancedPriceFields: PriceField[] = [
   { key: 'cache_creation_input_token_cost_priority', label: 'admin.modelPricing.fields.priorityCacheWrite', scale: 1_000_000, unit: '/ 1M' },
   { key: 'cache_read_input_token_cost_priority', label: 'admin.modelPricing.fields.priorityCacheRead', scale: 1_000_000, unit: '/ 1M' },
   { key: 'output_cost_per_image', label: 'admin.modelPricing.fields.perImage', scale: 1, unit: '/ image' },
+  { key: 'output_cost_per_video', label: 'admin.modelPricing.fields.perVideo', scale: 1, unit: '/ video' },
   { key: 'input_cost_per_image_token', label: 'admin.modelPricing.fields.imageInputToken', scale: 1_000_000, unit: '/ 1M' },
   { key: 'output_cost_per_image_token', label: 'admin.modelPricing.fields.imageOutputToken', scale: 1_000_000, unit: '/ 1M' }
 ]
@@ -367,6 +374,7 @@ const columns = computed<Column[]>(() => [
   { key: 'cache_creation_input_token_cost', label: t('admin.modelPricing.columns.cacheWrite') },
   { key: 'cache_read_input_token_cost', label: t('admin.modelPricing.columns.cacheRead') },
   { key: 'output_cost_per_image', label: t('admin.modelPricing.columns.image') },
+  { key: 'output_cost_per_video', label: t('admin.modelPricing.columns.video') },
   { key: 'source', label: t('admin.modelPricing.columns.source') },
   { key: 'actions', label: t('common.actions'), class: 'sticky right-0 bg-white dark:bg-dark-800' }
 ])
@@ -408,23 +416,27 @@ const filteredItems = computed(() => {
   })
 })
 const pagedItems = computed(() => filteredItems.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
-const unpricedCount = computed(() => groupPricingEntries.value.filter(isTokenPriceMissing).length)
+const unpricedCount = computed(() => groupPricingEntries.value.filter(isPricingMissing).length)
 
 watch([search, scopeFilter, sourceFilter, modeFilter], () => { page.value = 1 })
 
-function isTokenPriceMissing(item: ModelPricingCatalogEntry) {
-  const mediaMode = ['image_generation', 'image', 'audio', 'video'].includes(item.mode)
-  return !mediaMode && (item.token_pricing_absent || (item.input_cost_per_token === 0 && item.output_cost_per_token === 0))
+function isPricingMissing(item: ModelPricingCatalogEntry) {
+  if (item.mode === 'video') return item.output_cost_per_video <= 0
+  if (['image_generation', 'image'].includes(item.mode)) {
+    return item.output_cost_per_image <= 0 && item.input_cost_per_image_token <= 0 && item.output_cost_per_image_token <= 0
+  }
+  if (item.mode === 'audio') return false
+  return item.token_pricing_absent || (item.input_cost_per_token === 0 && item.output_cost_per_token === 0)
 }
 
 function pricingSourceLabel(item: ScopedModelPricingEntry) {
-  if (isTokenPriceMissing(item)) return t('admin.modelPricing.sourceMissing')
+  if (isPricingMissing(item)) return t('admin.modelPricing.sourceMissing')
   if (item.inherited_from) return t('admin.modelPricing.sourceInherited')
   return item.overridden ? t('admin.modelPricing.sourceOverride') : t('admin.modelPricing.sourceCatalog')
 }
 
 function sourceTrackClass(item: ScopedModelPricingEntry) {
-  if (isTokenPriceMissing(item)) return 'source-track-missing'
+  if (isPricingMissing(item)) return 'source-track-missing'
   if (item.inherited_from || item.overridden) return 'source-track-override'
   return 'source-track-catalog'
 }
@@ -433,7 +445,7 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, { minimumFractionDigits: 0, maximumFractionDigits: 6 }).format(value)
 }
 
-function formatImagePrice(value: number, item: ModelPricingCatalogEntry) {
+function formatMediaPrice(value: number, item: ModelPricingCatalogEntry) {
   if (value === 0) return '—'
   const currency = resolvePricingCurrency(item.litellm_provider, item.model)
   const displayValue = storedPriceToDisplay(value, 1)

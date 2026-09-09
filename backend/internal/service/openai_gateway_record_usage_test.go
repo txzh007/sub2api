@@ -575,8 +575,8 @@ func TestOpenAIGatewayServiceRecordUsage_DeepSeekAccountStatsUsesRequestPricingA
 		name        string
 		offPeakCost float64
 	}{
-		{"deepseek-v4-flash", 1000*2.2e-7 + 500*6.6e-7 + 1000*7e-9},
-		{"deepseek-v4-pro", 1000*6.6e-7 + 500*1.98e-6 + 1000*2.2e-8},
+		{"deepseek-v4-flash", 1000*1.5e-6 + 500*4.5e-6 + 1000*2.5e-8},
+		{"deepseek-v4-pro", 1000*4.5e-6 + 500*13.5e-6 + 1000*7.5e-8},
 	} {
 		for _, slot := range []struct {
 			name       string
@@ -2424,9 +2424,9 @@ func TestOpenAIGatewayServiceRecordUsage_GrokVideoUsesDefaultRateCard(t *testing
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
 	require.Nil(t, usageRepo.lastLog.ImageSize)
-	// 结果未携带 duration 时按上游默认 8 秒计费：0.14 USD/s × 8s。
-	require.InDelta(t, 0.14*8, usageRepo.lastLog.TotalCost, 1e-12)
-	require.InDelta(t, 0.14*8, usageRepo.lastLog.ActualCost, 1e-12)
+	// 结果未携带 duration 时仍记录默认 8 秒，但按一次视频生成计费。
+	require.InDelta(t, 1.12, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, 1.12, usageRepo.lastLog.ActualCost, 1e-12)
 	require.Equal(t, 0, usageRepo.lastLog.ImageCount)
 	require.NotNil(t, usageRepo.lastLog.BillingMode)
 	require.Equal(t, string(BillingModeVideo), *usageRepo.lastLog.BillingMode)
@@ -2564,8 +2564,8 @@ func TestOpenAIGatewayServiceRecordUsage_GroupVideoModelPriceOverridesFlatAndCha
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.InDelta(t, modelVideoPrice720P*2, usageRepo.lastLog.TotalCost, 1e-12)
-	require.InDelta(t, modelVideoPrice720P*2, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, modelVideoPrice720P, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, modelVideoPrice720P, usageRepo.lastLog.ActualCost, 1e-12)
 	require.NotNil(t, usageRepo.lastLog.BillingMode)
 	require.Equal(t, string(BillingModeVideo), *usageRepo.lastLog.BillingMode)
 }
@@ -2803,6 +2803,39 @@ func newOpenAIImageChannelPricingResolverForTest(t *testing.T, groupID int64, mo
 	cs := &ChannelService{}
 	cs.cache.Store(cache)
 	return NewModelPricingResolver(cs, NewBillingService(&config.Config{}, nil))
+}
+
+func TestOpenAIGatewayVideoChannelPricingBillsPerRequest(t *testing.T) {
+	groupID := int64(140)
+	model := "grok-imagine-video-1.5"
+	price := 0.88
+	cache := newEmptyChannelCache()
+	cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}] = &ChannelModelPricing{
+		BillingMode:     BillingModeVideo,
+		PerRequestPrice: &price,
+	}
+	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
+	cache.loadedAt = time.Now()
+	channelService := &ChannelService{}
+	channelService.cache.Store(cache)
+	billingService := NewBillingService(&config.Config{}, nil)
+	svc := &OpenAIGatewayService{
+		billingService: billingService,
+		resolver:       NewModelPricingResolver(channelService, billingService),
+	}
+
+	cost := svc.calculateOpenAIVideoCost(context.Background(), model, &APIKey{
+		GroupID: i64p(groupID),
+		Group:   &Group{ID: groupID, RateMultiplier: 1},
+	}, &OpenAIForwardResult{
+		VideoCount:           2,
+		VideoResolution:      VideoBillingResolution720P,
+		VideoDurationSeconds: 15,
+	}, 1)
+
+	require.InDelta(t, price*2, cost.TotalCost, 1e-12)
+	require.InDelta(t, price*2, cost.ActualCost, 1e-12)
+	require.Equal(t, string(BillingModeVideo), cost.BillingMode)
 }
 
 func newOpenAITokenImageChannelPricingResolverForTest(t *testing.T, groupID int64, model string) *ModelPricingResolver {

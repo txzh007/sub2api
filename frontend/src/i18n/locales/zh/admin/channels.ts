@@ -107,7 +107,7 @@ export default {
         token: 'Token',
         perRequest: '按次',
         image: '图片（按次）',
-        video: '视频（按秒）'
+        video: '视频（按次）'
       },
       form: {
         name: '名称',
@@ -165,7 +165,7 @@ export default {
         addInterval: '添加区间',
         requestTiers: '按次计费层级',
         imageTiers: '图片计费层级（按次）',
-        videoTiers: '视频分辨率层级（按秒）',
+        videoTiers: '视频分辨率层级（按次）',
         addTier: '添加层级',
         noTiersYet: '暂无层级，点击添加配置按次计费价格',
         noPricingRules: '暂无定价规则，点击"添加"创建',
@@ -191,7 +191,7 @@ export default {
         restrictModelsHint: '开启后，仅允许模型定价列表中的模型。不在列表中的模型请求将被拒绝。',
         defaultPerRequestPrice: '默认单次价格（未命中层级时使用）',
         defaultImagePrice: '默认图片价格（未命中层级时使用）',
-        defaultVideoPrice: '默认视频每秒价格（未命中层级时使用）',
+        defaultVideoPrice: '默认视频单次价格（未命中层级时使用）',
         platformConfig: '平台配置',
         webSearchEmulation: 'Web Search 模拟',
         webSearchEmulationHint: '⚠️ 开启后该渠道下所有 Anthropic 分组的账号将自动拦截 web_search 请求，请谨慎操作',
@@ -667,7 +667,7 @@ export default {
       hotReloaded: '写入后热加载，无需重启',
       unpricedModels: '当前分组未定价',
       needsAttention: '只统计启用分组中实际存在的模型，需补充价格以避免按 0 元计费',
-      allPriced: '当前启用分组中的 Token 模型均已有价格',
+      allPriced: '当前启用分组中的模型均已有价格',
       overrideFile: '覆盖文件',
       sharedVolumeHint: '请将 data 目录持久化并由实例共享',
       searchPlaceholder: '搜索模型名或供应商...',
@@ -693,7 +693,7 @@ export default {
       wildcardHint: '仅支持末尾一个 *，不允许使用裸 *',
       tokenPrices: 'Token 价格',
       priceInputHint: '按每百万 Token 输入 {currency} 价格；保存时只换算 Token 单位，不换算币种汇率。',
-      advancedPrices: '高级与图片价格',
+      advancedPrices: '高级与媒体价格',
       saveAndApply: '保存并立即应用',
       filters: {
         activeGroups: '当前启用分组模型',
@@ -710,6 +710,7 @@ export default {
         cacheWrite: '缓存写 / 1M',
         cacheRead: '缓存读 / 1M',
         image: '图片 / 张',
+        video: '视频 / 次',
         source: '价格来源'
       },
       fields: {
@@ -723,6 +724,7 @@ export default {
         priorityCacheWrite: 'Priority 缓存写入',
         priorityCacheRead: 'Priority 缓存读取',
         perImage: '每张图片',
+        perVideo: '每个视频',
         imageInputToken: '图片输入 Token',
         imageOutputToken: '图片输出 Token'
       },

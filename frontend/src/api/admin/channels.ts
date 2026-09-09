@@ -220,6 +220,7 @@ export interface ModelPricingCatalogEntry {
   cache_read_input_token_cost: number
   cache_read_input_token_cost_priority: number
   output_cost_per_image: number
+  output_cost_per_video: number
   output_cost_per_image_token: number
   input_cost_per_image_token: number
   long_context_input_token_threshold: number

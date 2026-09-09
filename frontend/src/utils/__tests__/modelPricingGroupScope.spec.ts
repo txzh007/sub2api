@@ -24,6 +24,7 @@ function catalogEntry(model: string, input = 0, output = 0, wildcard = false): M
     cache_read_input_token_cost: 0,
     cache_read_input_token_cost_priority: 0,
     output_cost_per_image: 0,
+    output_cost_per_video: 0,
     output_cost_per_image_token: 0,
     input_cost_per_image_token: 0,
     long_context_input_token_threshold: 0,

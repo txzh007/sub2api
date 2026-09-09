@@ -507,45 +507,45 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{
 			name:              "deepseek v4 pro",
 			model:             "deepseek-v4-pro",
-			expectedInput:     6.6e-7,
-			expectedOutput:    floatPtr(1.98e-6),
-			expectedCacheRead: floatPtr(2.2e-8),
+			expectedInput:     4.5e-6,
+			expectedOutput:    floatPtr(13.5e-6),
+			expectedCacheRead: floatPtr(7.5e-8),
 		},
 		{
 			name:              "deepseek v4 flash",
 			model:             "deepseek-v4-flash",
-			expectedInput:     2.2e-7,
-			expectedOutput:    floatPtr(6.6e-7),
-			expectedCacheRead: floatPtr(7e-9),
+			expectedInput:     1.5e-6,
+			expectedOutput:    floatPtr(4.5e-6),
+			expectedCacheRead: floatPtr(2.5e-8),
 		},
 		{
 			name:              "deepseek v4 flash vision exp",
 			model:             "deepseek-v4-flash-vision-exp",
-			expectedInput:     2.2e-7,
-			expectedOutput:    floatPtr(6.6e-7),
-			expectedCacheRead: floatPtr(7e-9),
+			expectedInput:     1.5e-6,
+			expectedOutput:    floatPtr(4.5e-6),
+			expectedCacheRead: floatPtr(2.5e-8),
 		},
 		{
 			// deepseek-chat / deepseek-reasoner 已停止服务，统一按 flash 价兜底。
 			name:              "deepseek chat discontinued maps to flash",
 			model:             "deepseek-chat",
-			expectedInput:     2.2e-7,
-			expectedOutput:    floatPtr(6.6e-7),
-			expectedCacheRead: floatPtr(7e-9),
+			expectedInput:     1.5e-6,
+			expectedOutput:    floatPtr(4.5e-6),
+			expectedCacheRead: floatPtr(2.5e-8),
 		},
 		{
 			name:              "deepseek reasoner discontinued maps to flash",
 			model:             "deepseek-reasoner",
-			expectedInput:     2.2e-7,
-			expectedOutput:    floatPtr(6.6e-7),
-			expectedCacheRead: floatPtr(7e-9),
+			expectedInput:     1.5e-6,
+			expectedOutput:    floatPtr(4.5e-6),
+			expectedCacheRead: floatPtr(2.5e-8),
 		},
 		{
 			name:              "unknown deepseek maps to flash",
 			model:             "deepseek-foo",
-			expectedInput:     2.2e-7,
-			expectedOutput:    floatPtr(6.6e-7),
-			expectedCacheRead: floatPtr(7e-9),
+			expectedInput:     1.5e-6,
+			expectedOutput:    floatPtr(4.5e-6),
+			expectedCacheRead: floatPtr(2.5e-8),
 		},
 
 		// ---- 智谱 GLM（z.ai USD 口径）----
@@ -986,24 +986,24 @@ func TestCalculateVideoCostUsesSeparateConfig(t *testing.T) {
 	videoCost := svc.CalculateVideoCost("grok-imagine-video", "480p", 1, 10, &VideoPriceConfig{Price480P: &videoPrice}, 0.5)
 
 	require.InDelta(t, 0.4, imageCost.TotalCost, 1e-10)
-	require.InDelta(t, 0.8, videoCost.TotalCost, 1e-10)
-	require.InDelta(t, 0.4, videoCost.ActualCost, 1e-10)
+	require.InDelta(t, 0.08, videoCost.TotalCost, 1e-10)
+	require.InDelta(t, 0.04, videoCost.ActualCost, 1e-10)
 	require.Equal(t, string(BillingModeVideo), videoCost.BillingMode)
 }
 
-func TestCalculateVideoCostBillsPerSecond(t *testing.T) {
+func TestCalculateVideoCostBillsPerRequest(t *testing.T) {
 	svc := newTestBillingService()
 
 	oneSecond := svc.CalculateVideoCost("grok-imagine-video", "720p", 1, 1, nil, 1.0)
 	fifteenSeconds := svc.CalculateVideoCost("grok-imagine-video", "720p", 1, 15, nil, 1.0)
-	// duration <=0 时按上游默认 8 秒计费，超出上限按 15 秒收敛。
+	// 时长仍会由用量记录层归一化，但不改变按次费用。
 	defaultDuration := svc.CalculateVideoCost("grok-imagine-video", "720p", 1, 0, nil, 1.0)
 	clampedDuration := svc.CalculateVideoCost("grok-imagine-video", "720p", 1, 999, nil, 1.0)
 
-	require.InDelta(t, 0.07, oneSecond.TotalCost, 1e-10)
-	require.InDelta(t, 0.07*15, fifteenSeconds.TotalCost, 1e-10)
-	require.InDelta(t, 0.07*8, defaultDuration.TotalCost, 1e-10)
-	require.InDelta(t, 0.07*15, clampedDuration.TotalCost, 1e-10)
+	require.InDelta(t, 0.56, oneSecond.TotalCost, 1e-10)
+	require.InDelta(t, 0.56, fifteenSeconds.TotalCost, 1e-10)
+	require.InDelta(t, 0.56, defaultDuration.TotalCost, 1e-10)
+	require.InDelta(t, 0.56, clampedDuration.TotalCost, 1e-10)
 }
 
 func TestCalculateGrokImagineImageCostUsesDefaultRateCard(t *testing.T) {
@@ -1023,18 +1023,28 @@ func TestCalculateGrokImagineImageCostUsesDefaultRateCard(t *testing.T) {
 func TestCalculateGrokImagineVideoCostUsesDefaultRateCard(t *testing.T) {
 	svc := newTestBillingService()
 
-	// 默认价目为 xAI 官方每秒价格，按 1 秒时长验证每秒单价。
+	// 默认按次价由原每秒价 × 默认 8 秒折算。
 	standard480P := svc.CalculateVideoCost("grok-imagine-video", "480p", 1, 1, nil, 1.0)
 	standard720P := svc.CalculateVideoCost("grok-imagine-video", "720p", 1, 1, nil, 1.0)
 	video15_480P := svc.CalculateVideoCost("grok-imagine-video-1.5", "480p", 1, 1, nil, 1.0)
 	video15_720P := svc.CalculateVideoCost("grok-imagine-video-1.5", "720p", 1, 1, nil, 1.0)
 	video15_1080P := svc.CalculateVideoCost("grok-imagine-video-1.5", "1080p", 1, 1, nil, 1.0)
 
-	require.InDelta(t, 0.05, standard480P.TotalCost, 1e-10)
-	require.InDelta(t, 0.07, standard720P.TotalCost, 1e-10)
-	require.InDelta(t, 0.08, video15_480P.TotalCost, 1e-10)
-	require.InDelta(t, 0.14, video15_720P.TotalCost, 1e-10)
-	require.InDelta(t, 0.25, video15_1080P.TotalCost, 1e-10)
+	require.InDelta(t, 0.40, standard480P.TotalCost, 1e-10)
+	require.InDelta(t, 0.56, standard720P.TotalCost, 1e-10)
+	require.InDelta(t, 0.64, video15_480P.TotalCost, 1e-10)
+	require.InDelta(t, 1.12, video15_720P.TotalCost, 1e-10)
+	require.InDelta(t, 2.00, video15_1080P.TotalCost, 1e-10)
+}
+
+func TestCalculateVideoCostUsesCatalogPerVideoPriceForAliases(t *testing.T) {
+	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"xai/grok-video-1.5": {OutputCostPerVideo: 0.77, Mode: "video"},
+	}}
+	svc := NewBillingService(nil, pricingSvc)
+
+	cost := svc.CalculateVideoCost("xai/grok-video-1.5", "1080p", 2, 15, nil, 1)
+	require.InDelta(t, 1.54, cost.TotalCost, 1e-10)
 }
 
 func TestIsModelSupported(t *testing.T) {
