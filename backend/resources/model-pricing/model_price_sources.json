@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-09-09",
+  "ledger_policy": {
+    "domestic_currency": "CNY",
+    "international_currency": "USD",
+    "token_price_unit": "per_1m_tokens",
+    "media_price_unit": "per_request",
+    "foreign_exchange_conversion": false,
+    "description": "国产模型按人民币数字记账，国际模型按美元数字记账；两种账本之间不做汇率换算。"
+  },
+  "status_definitions": {
+    "verified": "已在供应商官方按量计费页面核验。",
+    "operator_policy": "TToken 运营定价或峰谷规则，不代表模型厂商官方目录价。",
+    "provisional": "临时参考价或同系列继承价，等待官方按量价格核验。"
+  },
+  "sources": {
+    "alibaba_model_studio_cn": {
+      "name": "阿里云百炼模型价格",
+      "kind": "official",
+      "currency": "CNY",
+      "url": "https://help.aliyun.com/zh/model-studio/model-pricing"
+    },
+    "deepseek_official_cn": {
+      "name": "DeepSeek API 模型与价格说明",
+      "kind": "official_reference",
+      "currency": "CNY",
+      "url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+    },
+    "minimax_paygo_cn": {
+      "name": "MiniMax 开放平台按量计费",
+      "kind": "official",
+      "currency": "CNY",
+      "url": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    },
+    "models_dev_api": {
+      "name": "models.dev API",
+      "kind": "aggregator_reference",
+      "currency": "USD",
+      "url": "https://models.dev/api.json",
+      "notes": "仅用于发现模型和交叉核对；其价格统一为 USD，不可直接覆盖 TToken 的国产模型 CNY 账本。",
+      "alignment_snapshot": {
+        "checked_at": "2026-09-09",
+        "formula": "official_cny_price / models_dev_usd_price",
+        "automatic_multiplier": null,
+        "reason": "同一供应商甚至同一家族的隐含倍率也可能不同，不能用单一汇率保证与官方目录价对齐。",
+        "native_provider_keys": [
+          "alibaba-cn",
+          "volcengine",
+          "minimax-cn",
+          "moonshotai-cn",
+          "zhipuai"
+        ],
+        "examples": {
+          "doubao-seed-2-1-pro-260628": {
+            "models_dev_input_usd": 0.8906,
+            "official_input_cny": 6,
+            "input_multiplier": 6.737,
+            "models_dev_output_usd": 4.45301,
+            "official_output_cny": 30,
+            "output_multiplier": 6.737
+          },
+          "MiniMax-M2.7-highspeed": {
+            "models_dev_input_usd": 0.6,
+            "official_input_cny": 4.2,
+            "input_multiplier": 7,
+            "models_dev_output_usd": 2.4,
+            "official_output_cny": 16.8,
+            "output_multiplier": 7
+          },
+          "qwen3.8-max": {
+            "models_dev_input_usd": 1.77744,
+            "official_input_cny": 12,
+            "input_multiplier": 6.751,
+            "models_dev_output_usd": 5.33231,
+            "official_output_cny": 36,
+            "output_multiplier": 6.751
+          }
+        }
+      }
+    },
+    "moonshot_models_cn": {
+      "name": "Kimi API 模型列表",
+      "kind": "official_reference",
+      "currency": "CNY",
+      "url": "https://platform.kimi.com/docs/models",
+      "notes": "用于确认官方模型名称；当前临时价格仍需与官方按量计费页复核。"
+    },
+    "ttoken_operator_policy": {
+      "name": "TToken 运营定价策略",
+      "kind": "operator_policy",
+      "currency": "CNY",
+      "notes": "用于供应商尚未发布同名模型官方目录价、渠道别名或自定义峰谷倍率。"
+    },
+    "volcengine_ark_cn": {
+      "name": "火山方舟模型价格",
+      "kind": "official",
+      "currency": "CNY",
+      "url": "https://docs.volcengine.com/docs/82379/1544106?lang=zh"
+    },
+    "zhipu_bigmodel_cn": {
+      "name": "智谱 BigModel 模型价格",
+      "kind": "official",
+      "currency": "CNY",
+      "url": "https://bigmodel.cn/pricing"
+    }
+  },
+  "models": {
+    "MiniMax-M2.7-highspeed": {
+      "provider": "minimax",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "minimax_paygo_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 4.2,
+        "output": 16.8,
+        "cache_read": 0.42,
+        "cache_write": 2.625
+      }
+    },
+    "MiniMax-M3": {
+      "provider": "minimax",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "provisional",
+      "source_ids": [
+        "minimax_paygo_cn",
+        "models_dev_api"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 4.2,
+        "output": 16.8
+      },
+      "notes": "暂按 MiniMax-M2.7-highspeed 家族价计费；官方页面目前只明确 M3 的 Token Plan，待官方按量价发布后更新。"
+    },
+    "deepseek-v4-flash": {
+      "provider": "deepseek",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "operator_policy",
+      "source_ids": [
+        "ttoken_operator_policy",
+        "deepseek_official_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "off_peak_input": 1.5,
+        "off_peak_output": 4.5,
+        "off_peak_cache_read": 0.025,
+        "peak_input": 3,
+        "peak_output": 9,
+        "peak_cache_read": 0.05
+      },
+      "schedule": {
+        "timezone": "Asia/Shanghai",
+        "weekdays": [
+          "09:00-12:00",
+          "14:00-18:00"
+        ],
+        "weekends": "off_peak",
+        "peak_multiplier": 2
+      },
+      "notes": "deepseek-v4-flash 是当前渠道别名；峰谷窗口和倍率属于 TToken 运营策略，不标记为 DeepSeek 官方同名模型价格。"
+    },
+    "deepseek-v4-flash-0731": {
+      "inherits": "deepseek-v4-flash",
+      "status": "operator_policy",
+      "source_ids": [
+        "ttoken_operator_policy"
+      ],
+      "notes": "渠道日期别名。"
+    },
+    "deepseek-v4-pro": {
+      "provider": "deepseek",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "operator_policy",
+      "source_ids": [
+        "ttoken_operator_policy",
+        "deepseek_official_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "off_peak_input": 4.5,
+        "off_peak_output": 13.5,
+        "off_peak_cache_read": 0.075,
+        "peak_input": 9,
+        "peak_output": 27,
+        "peak_cache_read": 0.15
+      },
+      "schedule": {
+        "timezone": "Asia/Shanghai",
+        "weekdays": [
+          "09:00-12:00",
+          "14:00-18:00"
+        ],
+        "weekends": "off_peak",
+        "peak_multiplier": 2
+      },
+      "notes": "deepseek-v4-pro 是当前渠道别名；峰谷窗口和倍率属于 TToken 运营策略，不标记为 DeepSeek 官方同名模型价格。"
+    },
+    "deepseek-v4-pro-0813": {
+      "inherits": "deepseek-v4-pro",
+      "status": "operator_policy",
+      "source_ids": [
+        "ttoken_operator_policy"
+      ],
+      "notes": "渠道日期别名。"
+    },
+    "doubao-seed-2-1-pro": {
+      "provider": "volcengine",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "volcengine_ark_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 6,
+        "output": 30
+      }
+    },
+    "doubao-seed-2-1-turbo": {
+      "provider": "volcengine",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "volcengine_ark_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 3,
+        "output": 15
+      }
+    },
+    "glm-5.2": {
+      "provider": "zhipu",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "provisional",
+      "source_ids": [
+        "zhipu_bigmodel_cn",
+        "ttoken_operator_policy"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 8,
+        "output": 28
+      },
+      "notes": "采用当前渠道目录中的长输入档价格；官方页面可确认模型存在，但价格字段仍需再次核验。"
+    },
+    "glm-5.2-fast-preview": {
+      "provider": "zhipu",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "operator_policy",
+      "source_ids": [
+        "ttoken_operator_policy",
+        "zhipu_bigmodel_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 16,
+        "output": 56
+      },
+      "notes": "当前按 GLM-5.2 的 2 倍极速通道策略计费，等待同名模型官方按量价格。"
+    },
+    "glm-5.3": {
+      "inherits": "glm-5.2",
+      "status": "provisional",
+      "source_ids": [
+        "zhipu_bigmodel_cn",
+        "models_dev_api"
+      ],
+      "notes": "暂继承 GLM-5.2，等待 GLM-5.3 官方按量价格核验。"
+    },
+    "kimi-k2.7-code": {
+      "provider": "moonshot",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "provisional",
+      "source_ids": [
+        "moonshot_models_cn",
+        "models_dev_api",
+        "ttoken_operator_policy"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 6.5,
+        "output": 27
+      },
+      "notes": "当前渠道参考价；models.dev 仅用于交叉核对模型数据，等待官方人民币按量价格。"
+    },
+    "kimi-k3": {
+      "provider": "moonshot",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "provisional",
+      "source_ids": [
+        "moonshot_models_cn",
+        "models_dev_api",
+        "ttoken_operator_policy"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 20,
+        "output": 100
+      },
+      "notes": "当前渠道参考价；等待 Moonshot 官方人民币按量价格页核验。"
+    },
+    "qwen3.6-flash": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 1.2,
+        "output": 7.2
+      },
+      "notes": "采用官方页面的基础上下文档价格。"
+    },
+    "qwen3.7-flash": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 0.2,
+        "output": 0.8
+      },
+      "notes": "采用官方页面不超过 32K 上下文档价格。"
+    },
+    "qwen3.7-max": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 12,
+        "output": 36
+      }
+    },
+    "qwen3.7-plus": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 2,
+        "output": 8
+      },
+      "notes": "采用官方页面的基础上下文档价格。"
+    },
+    "qwen3.8-2.4t-a95b": {
+      "inherits": "qwen3.8-max",
+      "status": "provisional",
+      "source_ids": [
+        "alibaba_model_studio_cn",
+        "ttoken_operator_policy"
+      ],
+      "notes": "渠道参数别名，暂继承 qwen3.8-max。"
+    },
+    "qwen3.8-flash": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 0.8,
+        "output": 2.7
+      }
+    },
+    "qwen3.8-max": {
+      "provider": "dashscope",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "verified_at": "2026-09-09",
+      "prices": {
+        "input": 12,
+        "output": 36
+      }
+    },
+    "qwen3.8-max-0902": {
+      "inherits": "qwen3.8-max",
+      "status": "verified",
+      "source_ids": [
+        "alibaba_model_studio_cn"
+      ],
+      "notes": "官方日期版本别名。"
+    }
+  }
+}
