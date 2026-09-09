@@ -188,17 +188,17 @@ func writePricingOverrideFile(path string, entries map[string]json.RawMessage) e
 		return fmt.Errorf("create temporary pricing override file: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	if err := tmp.Chmod(0644); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("set pricing override permissions: %w", err)
 	}
 	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write pricing override file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("sync pricing override file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

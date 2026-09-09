@@ -55,9 +55,10 @@ func (h *AccountHandler) PreviewImageModels(c *gin.Context) {
 		var syncErr *service.UpstreamModelSyncError
 		if errors.As(err, &syncErr) {
 			status := http.StatusBadGateway
-			if syncErr.Kind == service.UpstreamModelSyncErrorConfiguration || syncErr.Kind == service.UpstreamModelSyncErrorUnsupported {
+			switch syncErr.Kind {
+			case service.UpstreamModelSyncErrorConfiguration, service.UpstreamModelSyncErrorUnsupported:
 				status = http.StatusBadRequest
-			} else if syncErr.Kind == service.UpstreamModelSyncErrorInternal {
+			case service.UpstreamModelSyncErrorInternal:
 				status = http.StatusInternalServerError
 			}
 			response.Error(c, status, syncErr.SafeMessage())

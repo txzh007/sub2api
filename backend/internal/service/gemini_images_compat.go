@@ -46,7 +46,7 @@ func ParseGeminiImagesRequest(c *gin.Context, body []byte) (*OpenAIImagesRequest
 			}
 		}
 		if n := gjson.GetBytes(body, "n"); n.Exists() && (n.Type != gjson.Number || n.Float() != 1) {
-			return nil, fmt.Errorf("Gemini Images currently supports n=1")
+			return nil, fmt.Errorf("gemini images currently supports n=1")
 		}
 		err = parseOpenAIImagesJSONRequest(body, r)
 	}
@@ -63,25 +63,25 @@ func ParseGeminiImagesRequest(c *gin.Context, body []byte) (*OpenAIImagesRequest
 		return nil, fmt.Errorf("prompt is required")
 	}
 	if r.N != 1 {
-		return nil, fmt.Errorf("Gemini Images currently supports n=1; submit separate requests for multiple images")
+		return nil, fmt.Errorf("gemini images currently supports n=1; submit separate requests for multiple images")
 	}
 	if r.HasMask || r.MaskUpload != nil || r.MaskImageURL != "" {
-		return nil, fmt.Errorf("Gemini Images does not support mask; describe the edit in the prompt")
+		return nil, fmt.Errorf("gemini images does not support mask; describe the edit in the prompt")
 	}
 	if r.ResponseFormat != "" && r.ResponseFormat != "b64_json" && r.ResponseFormat != "url" {
 		return nil, fmt.Errorf("response_format must be b64_json or url")
 	}
 	if r.OutputFormat != "" && r.OutputFormat != "png" {
-		return nil, fmt.Errorf("Gemini Images currently supports output_format=png")
+		return nil, fmt.Errorf("gemini images currently supports output_format=png")
 	}
 	if r.Background == "transparent" {
-		return nil, fmt.Errorf("Gemini Images does not support transparent backgrounds")
+		return nil, fmt.Errorf("gemini images does not support transparent backgrounds")
 	}
 	if r.Quality != "" && r.Quality != "auto" {
-		return nil, fmt.Errorf("Gemini Images does not support quality; use size to select resolution")
+		return nil, fmt.Errorf("gemini images does not support quality; use size to select resolution")
 	}
 	if r.PartialImages != nil && *r.PartialImages != 0 {
-		return nil, fmt.Errorf("Gemini Images does not support partial_images")
+		return nil, fmt.Errorf("gemini images does not support partial_images")
 	}
 	r.SizeTier = normalizeOpenAIImageSizeTier(r.Size)
 	return r, nil
@@ -139,7 +139,7 @@ func GeminiImageReferencePart(value string) (map[string]any, error) {
 	}
 	// A remote URL has no reliable MIME type and ordinary public URLs are not
 	// portable across Gemini backends. Accept bytes without a gateway URL fetch.
-	return nil, fmt.Errorf("Gemini reference images must be uploaded as multipart files or base64 data URLs")
+	return nil, fmt.Errorf("gemini reference images must be uploaded as multipart files or base64 data URLs")
 }
 
 func geminiImagesSizeConfig(size string) (map[string]any, error) {
@@ -232,7 +232,7 @@ func GeminiImagesResponse(body []byte, model, responseFormat string) (*GeminiCom
 		if reason == "" {
 			reason = root.Get("candidates.0.finishReason").String()
 		}
-		return nil, fmt.Errorf("Gemini returned no image (finish reason: %s)", reason)
+		return nil, fmt.Errorf("gemini returned no image (finish reason: %s)", reason)
 	}
 	u := root.Get("usageMetadata")
 	if u.Exists() {

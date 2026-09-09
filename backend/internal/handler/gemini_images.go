@@ -114,7 +114,7 @@ func (h *GatewayHandler) executeGeminiImage(c *gin.Context, model string, body [
 		return nil, capture, capture.err
 	}
 	if capture.Status() >= 400 {
-		return nil, capture, fmt.Errorf("Gemini request failed")
+		return nil, capture, fmt.Errorf("gemini request failed")
 	}
 	result, err := service.GeminiImagesResponse(capture.body.Bytes(), model, responseFormat)
 	return result, capture, err
@@ -160,9 +160,10 @@ func (w *imageBridgeCapture) Written() bool { return w.written }
 func imageBridgeChildContext(c *gin.Context, body []byte) (*gin.Context, *imageBridgeCapture) {
 	// Gin Copy also reads its writer state. Serialize it with keepalive writes.
 	if value, ok := c.Get(imageBridgeWriterMutexKey); ok {
-		mu := value.(*sync.Mutex)
-		mu.Lock()
-		defer mu.Unlock()
+		if mu, valid := value.(*sync.Mutex); valid {
+			mu.Lock()
+			defer mu.Unlock()
+		}
 	}
 	child := c.Copy()
 	child.Request = c.Request.Clone(c.Request.Context())

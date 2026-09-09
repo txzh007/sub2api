@@ -328,8 +328,12 @@ func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool m
 	input = append(input, outputs...)
 	input = append(input, toolOutputs...)
 	request["input"] = input
+	requestTools, ok := request["tools"].([]any)
+	if !ok {
+		return nil, capture, fmt.Errorf("image bridge tools must be an array")
+	}
 	var remaining []any
-	for _, raw := range request["tools"].([]any) {
+	for _, raw := range requestTools {
 		if !isBridgeImageTool(raw) {
 			remaining = append(remaining, raw)
 		}
@@ -412,7 +416,9 @@ func (h *GatewayHandler) callGeminiImageTool(c *gin.Context, route service.Compo
 	body, _ := json.Marshal(payload)
 	child, capture := imageBridgeBillableChildContext(c, body)
 	if value, ok := c.Get(imageBridgeBindingKey); ok {
-		applyImageBridgeBinding(child, value.(*imageBridgeBinding))
+		if binding, valid := value.(*imageBridgeBinding); valid {
+			applyImageBridgeBinding(child, binding)
+		}
 	}
 	child.Request.Header.Set("Content-Type", "application/json")
 	child.Request.URL.Path = path
@@ -439,7 +445,7 @@ func (h *GatewayHandler) callGeminiImageTool(c *gin.Context, route service.Compo
 		output = append(output, map[string]any{"id": "ig_sub2api_" + uuid.NewString(), "type": "image_generation_call", "status": "completed", "result": image.B64JSON, "output_format": strings.TrimPrefix(image.MimeType, "image/"), "model": route.UpstreamModel, "revised_prompt": prompt})
 	}
 	if len(output) == 0 {
-		return nil, capture, fmt.Errorf("Gemini returned no image")
+		return nil, capture, fmt.Errorf("gemini returned no image")
 	}
 	return output, capture, nil
 }
@@ -560,9 +566,10 @@ func writeImageBridgeResponses(c *gin.Context, response map[string]any) {
 		emit(map[string]any{"type": "response.output_item.done", "output_index": index, "item": item})
 	}
 	terminal := "response.completed"
-	if response["status"] == "incomplete" {
+	switch response["status"] {
+	case "incomplete":
 		terminal = "response.incomplete"
-	} else if response["status"] == "failed" {
+	case "failed":
 		terminal = "response.failed"
 	}
 	emit(map[string]any{"type": terminal, "response": response})

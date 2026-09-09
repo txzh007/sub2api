@@ -120,8 +120,12 @@ func TestUpsertPricingOverrideAppliesImmediatelyAndPreservesFields(t *testing.T)
 
 	overrides := readAdminPricingOverrides(t, overridePath)
 	require.Equal(t, "September price card", overrides["qwen3-max"]["operator_note"])
-	require.InDelta(t, 3e-6, overrides["qwen3-max"]["input_cost_per_token"].(float64), 1e-12)
-	require.InDelta(t, 9e-6, overrides["qwen3-max"]["output_cost_per_token"].(float64), 1e-12)
+	inputCost, ok := overrides["qwen3-max"]["input_cost_per_token"].(float64)
+	require.True(t, ok)
+	outputCost, ok := overrides["qwen3-max"]["output_cost_per_token"].(float64)
+	require.True(t, ok)
+	require.InDelta(t, 3e-6, inputCost, 1e-12)
+	require.InDelta(t, 9e-6, outputCost, 1e-12)
 }
 
 func TestDeletePricingOverrideRestoresCatalogPrice(t *testing.T) {
