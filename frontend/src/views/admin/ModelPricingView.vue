@@ -38,11 +38,11 @@
 
           <div class="pricing-ledger-grid">
             <div class="ledger-stat">
-              <span class="ledger-label">{{ t('admin.modelPricing.totalModels') }}</span>
-              <strong>{{ catalog?.model_count ?? 0 }}</strong>
-              <span>{{ t('admin.modelPricing.modelCoverage', {
-                active: catalog?.active_model_count ?? 0,
-                deprecated: catalog?.deprecated_model_count ?? 0
+              <span class="ledger-label">{{ t('admin.modelPricing.enabledGroupModels') }}</span>
+              <strong>{{ groupPricingEntries.length }}</strong>
+              <span>{{ t('admin.modelPricing.groupCoverage', {
+                groups: activeGroups.length,
+                catalog: catalog?.model_count ?? 0
               }) }}</span>
             </div>
             <div class="ledger-stat ledger-stat-accent">
@@ -72,7 +72,7 @@
                 :placeholder="t('admin.modelPricing.searchPlaceholder')"
               />
             </div>
-            <Select v-model="lifecycleFilter" class="w-full lg:w-52" :options="lifecycleOptions" />
+            <Select v-model="scopeFilter" class="w-full lg:w-64" :options="scopeOptions" />
             <Select v-model="sourceFilter" class="w-full lg:w-44" :options="sourceOptions" />
             <Select v-model="modeFilter" class="w-full lg:w-44" :options="modeOptions" />
             <div class="ml-auto text-xs text-gray-500 dark:text-gray-400">
@@ -89,6 +89,7 @@
               <div class="flex items-center gap-2">
                 <code class="font-semibold text-gray-900 dark:text-gray-100">{{ row.model }}</code>
                 <span v-if="row.wildcard" class="rule-badge">{{ t('admin.modelPricing.prefixRule') }}</span>
+                <span v-if="row.inherited_from" class="rule-badge">{{ t('admin.modelPricing.inheritedRule', { rule: row.inherited_from }) }}</span>
                 <span v-if="row.deprecated" class="deprecated-badge">{{ t('admin.modelPricing.deprecated') }}</span>
               </div>
               <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -100,6 +101,9 @@
               </div>
               <div v-if="row.deprecation_date" class="mt-1 text-xs" :class="row.deprecated ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">
                 {{ t('admin.modelPricing.deprecationDate', { date: row.deprecation_date }) }}
+              </div>
+              <div v-if="row.group_names?.length" class="mt-1 text-xs text-primary-600 dark:text-primary-400">
+                {{ t('admin.modelPricing.usedByGroups', { groups: row.group_names.join('、') }) }}
               </div>
             </div>
           </template>
@@ -122,9 +126,9 @@
             </span>
           </template>
           <template #cell-source="{ row }">
-            <div class="source-track" :class="row.overridden ? 'source-track-override' : 'source-track-catalog'">
+            <div class="source-track" :class="sourceTrackClass(row)">
               <span class="source-dot"></span>
-              <span>{{ row.overridden ? t('admin.modelPricing.sourceOverride') : t('admin.modelPricing.sourceCatalog') }}</span>
+              <span>{{ pricingSourceLabel(row) }}</span>
             </div>
           </template>
           <template #cell-actions="{ row }">
@@ -133,7 +137,7 @@
                 <Icon name="edit" size="sm" />
               </button>
               <button
-                v-if="row.overridden"
+                v-if="row.overridden && !row.inherited_from"
                 class="icon-action icon-action-danger"
                 :title="t('admin.modelPricing.restoreCatalog')"
                 @click="deleteTarget = row"
@@ -257,6 +261,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import channelsAPI, { type ModelPricingCatalog, type ModelPricingCatalogEntry } from '@/api/admin/channels'
+import groupsAPI from '@/api/admin/groups'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import {
@@ -267,9 +272,13 @@ import {
   type PricingCurrency
 } from '@/utils/pricingCurrency'
 import {
-  matchesModelPricingLifecycle,
-  type ModelPricingLifecycleFilter
-} from '@/utils/modelPricingLifecycle'
+  filterPricingEntriesByScope,
+  materializeGroupPricingEntries,
+  type ModelPricingScope,
+  type PricingGroupModels,
+  type ScopedModelPricingEntry
+} from '@/utils/modelPricingGroupScope'
+import type { AdminGroup } from '@/types'
 import type { Column } from '@/components/common/types'
 
 const { t, locale } = useI18n()
@@ -331,11 +340,14 @@ const advancedPriceFields: PriceField[] = [
 const allPriceFields = [...tokenPriceFields, ...advancedPriceFields]
 
 const catalog = ref<ModelPricingCatalog | null>(null)
+const activeGroups = ref<AdminGroup[]>([])
+const groupModels = ref<PricingGroupModels[]>([])
+const failedGroupCount = ref(0)
 const loading = ref(false)
 const refreshing = ref(false)
 const saving = ref(false)
 const search = ref('')
-const lifecycleFilter = ref<ModelPricingLifecycleFilter>('active')
+const scopeFilter = ref<ModelPricingScope>('active-groups')
 const sourceFilter = ref<string | number | boolean | null>('all')
 const modeFilter = ref<string | number | boolean | null>('all')
 const page = ref(1)
@@ -364,35 +376,57 @@ const sourceOptions = computed(() => [
   { value: 'override', label: t('admin.modelPricing.sourceOverride') },
   { value: 'catalog', label: t('admin.modelPricing.sourceCatalog') }
 ])
-const lifecycleOptions = computed(() => [
-  { value: 'active', label: t('admin.modelPricing.filters.activeOnly') },
-  { value: 'all', label: t('admin.modelPricing.filters.allLifecycles') },
-  { value: 'deprecated', label: t('admin.modelPricing.filters.deprecatedOnly') }
+const scopeOptions = computed(() => [
+  { value: 'active-groups', label: t('admin.modelPricing.filters.activeGroups') },
+  ...activeGroups.value.map(group => ({
+    value: `group:${group.id}`,
+    label: t('admin.modelPricing.filters.specificGroup', { group: group.name })
+  })),
+  { value: 'catalog', label: t('admin.modelPricing.filters.fullCatalog') },
+  { value: 'unused', label: t('admin.modelPricing.filters.unusedCatalog') }
 ])
+const groupPricingEntries = computed(() => materializeGroupPricingEntries(catalog.value?.items || [], groupModels.value))
+const scopedItems = computed(() => filterPricingEntriesByScope(
+  catalog.value?.items || [],
+  groupPricingEntries.value,
+  scopeFilter.value
+))
 const modeOptions = computed(() => {
-  const modes = [...new Set((catalog.value?.items || []).map(item => item.mode || 'chat'))].sort()
+  const modes = [...new Set(scopedItems.value.map(item => item.mode || 'chat'))].sort()
   return [{ value: 'all', label: t('admin.modelPricing.filters.allModes') }, ...modes.map(value => ({ value, label: value }))]
 })
 
 const filteredItems = computed(() => {
   const query = search.value.trim().toLowerCase()
-  return (catalog.value?.items || []).filter(item => {
-    if (!matchesModelPricingLifecycle(item, lifecycleFilter.value)) return false
-    if (sourceFilter.value === 'override' && !item.overridden) return false
-    if (sourceFilter.value === 'catalog' && item.overridden) return false
+  return scopedItems.value.filter(item => {
+    const usesRule = item.overridden || Boolean(item.inherited_from)
+    if (sourceFilter.value === 'override' && !usesRule) return false
+    if (sourceFilter.value === 'catalog' && usesRule) return false
     if (modeFilter.value !== 'all' && (item.mode || 'chat') !== modeFilter.value) return false
     if (!query) return true
     return `${item.model} ${item.litellm_provider} ${item.mode}`.toLowerCase().includes(query)
   })
 })
 const pagedItems = computed(() => filteredItems.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
-const unpricedCount = computed(() => (catalog.value?.items || []).filter(item => !item.deprecated && isTokenPriceMissing(item)).length)
+const unpricedCount = computed(() => groupPricingEntries.value.filter(isTokenPriceMissing).length)
 
-watch([search, lifecycleFilter, sourceFilter, modeFilter], () => { page.value = 1 })
+watch([search, scopeFilter, sourceFilter, modeFilter], () => { page.value = 1 })
 
 function isTokenPriceMissing(item: ModelPricingCatalogEntry) {
   const mediaMode = ['image_generation', 'image', 'audio', 'video'].includes(item.mode)
   return !mediaMode && (item.token_pricing_absent || (item.input_cost_per_token === 0 && item.output_cost_per_token === 0))
+}
+
+function pricingSourceLabel(item: ScopedModelPricingEntry) {
+  if (isTokenPriceMissing(item)) return t('admin.modelPricing.sourceMissing')
+  if (item.inherited_from) return t('admin.modelPricing.sourceInherited')
+  return item.overridden ? t('admin.modelPricing.sourceOverride') : t('admin.modelPricing.sourceCatalog')
+}
+
+function sourceTrackClass(item: ScopedModelPricingEntry) {
+  if (isTokenPriceMissing(item)) return 'source-track-missing'
+  if (item.inherited_from || item.overridden) return 'source-track-override'
+  return 'source-track-catalog'
 }
 
 function formatNumber(value: number) {
@@ -478,7 +512,23 @@ function buildPatch() {
 async function loadCatalog() {
   loading.value = true
   try {
-    catalog.value = await channelsAPI.listModelPricingCatalog()
+    const [nextCatalog, groups] = await Promise.all([
+      channelsAPI.listModelPricingCatalog(),
+      groupsAPI.getAll()
+    ])
+    const candidateResults = await Promise.allSettled(groups.map(group =>
+      groupsAPI.getModelAllowlistCandidates(group.id, group.platform)
+    ))
+    catalog.value = nextCatalog
+    activeGroups.value = groups
+    failedGroupCount.value = candidateResults.filter(result => result.status === 'rejected').length
+    groupModels.value = groups.map((group, index) => ({
+      group,
+      candidates: candidateResults[index].status === 'fulfilled' ? candidateResults[index].value : []
+    }))
+    if (failedGroupCount.value > 0) {
+      appStore.showError(t('admin.modelPricing.groupModelsLoadPartial', { count: failedGroupCount.value }))
+    }
     const maxPage = Math.max(1, Math.ceil(filteredItems.value.length / pageSize.value))
     if (page.value > maxPage) page.value = maxPage
   } catch (error) {
@@ -491,7 +541,8 @@ async function loadCatalog() {
 async function refreshRemote() {
   refreshing.value = true
   try {
-    catalog.value = await channelsAPI.refreshModelPricingCatalog()
+    await channelsAPI.refreshModelPricingCatalog()
+    await loadCatalog()
     appStore.showSuccess(t('admin.modelPricing.refreshSuccess'))
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('admin.modelPricing.refreshFailed')))
@@ -617,6 +668,8 @@ onMounted(loadCatalog)
 .source-track-catalog .source-dot { @apply bg-gray-400 ring-gray-100 dark:bg-dark-400 dark:ring-dark-700; }
 .source-track-override { @apply text-primary-700 dark:text-primary-300; }
 .source-track-override .source-dot { @apply bg-primary-500 ring-primary-100 dark:ring-primary-900/50; }
+.source-track-missing { @apply text-amber-700 dark:text-amber-300; }
+.source-track-missing .source-dot { @apply bg-amber-500 ring-amber-100 dark:ring-amber-900/50; }
 
 .icon-action {
   @apply rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-primary-400;
