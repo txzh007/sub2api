@@ -25,20 +25,26 @@ full CI workflow, and publishes a Linux AMD64 image as
 
 ## Blue-green Docker cutover
 
-The production Compose file includes an opt-in `ttoken-green` service. It uses
-the pinned TToken image, shares the existing PostgreSQL, Redis, network, and
-`/app/data` volume, and publishes the application on `127.0.0.1:18080` by
-default. The application still listens on port `8080` inside the container.
+The `deploy/docker-compose.ttoken-green.yml` override adds a `ttoken-green`
+service. It inherits the existing `sub2api` service's environment, PostgreSQL,
+Redis, network, and `/app/data` volume, while publishing the application on
+`127.0.0.1:18080` by default. The application listens on port `8080` inside the
+candidate container even when the existing deployment uses another port.
+Set a persistent 64-character hexadecimal `TOTP_ENCRYPTION_KEY` in `deploy/.env`
+before starting the candidate; the override requires it so encrypted settings do
+not become unreadable after a restart.
 
 Start and verify the candidate without replacing the existing `sub2api`
 container:
 
 ```bash
 cd deploy
-docker compose --profile ttoken-green pull ttoken-green
-docker compose --profile ttoken-green up -d ttoken-green
+docker compose -f docker-compose.yml -f docker-compose.ttoken-green.yml pull ttoken-green
+docker compose -f docker-compose.yml -f docker-compose.ttoken-green.yml \
+  up -d --no-deps ttoken-green
 curl -fsS http://127.0.0.1:18080/health
-docker compose exec ttoken-green /app/sub2api --version
+docker compose -f docker-compose.yml -f docker-compose.ttoken-green.yml \
+  exec ttoken-green /app/sub2api --version
 ```
 
 After verification, point the Nginx upstream at `127.0.0.1:18080`, reload

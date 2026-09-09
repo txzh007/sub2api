@@ -8,7 +8,7 @@ check_application_security_opt() {
   file=$1
   count=$(
     awk '
-      $0 ~ /^  sub2api:([[:space:]]+&[A-Za-z0-9_-]+)?$/ {
+      $0 == "  sub2api:" {
         in_application = 1
         next
       }
@@ -36,14 +36,14 @@ check_ttoken_green_security_inheritance() {
   file=$1
   count=$(
     awk '
-      $0 == "  ttoken-green:" {
-        in_candidate = 1
+      $0 == "    extends:" {
+        in_extends = 1
         next
       }
-      in_candidate && $0 ~ /^  [A-Za-z0-9_-]+:$/ {
-        in_candidate = 0
+      in_extends && $0 ~ /^    [A-Za-z0-9_-]+:$/ {
+        in_extends = 0
       }
-      in_candidate && $0 == "    <<: *sub2api-app" {
+      in_extends && $0 == "      service: sub2api" {
         count++
       }
       END { print count + 0 }
@@ -51,7 +51,7 @@ check_ttoken_green_security_inheritance() {
   )
 
   if [ "$count" -ne 1 ]; then
-    printf '%s must inherit the secured sub2api application definition for ttoken-green\n' "$file" >&2
+    printf '%s must extend the secured sub2api application definition\n' "$file" >&2
     exit 1
   fi
 }
@@ -65,6 +65,6 @@ do
   check_application_security_opt "$compose_file"
 done
 
-check_ttoken_green_security_inheritance deploy/docker-compose.yml
+check_ttoken_green_security_inheritance deploy/docker-compose.ttoken-green.yml
 
 printf 'docker compose security test passed\n'
