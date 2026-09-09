@@ -667,6 +667,8 @@ type PricingConfig struct {
 	DataDir string `mapstructure:"data_dir"`
 	// 回退文件路径
 	FallbackFile string `mapstructure:"fallback_file"`
+	// TToken 随版本发布的受管价格补丁（只读，优先级低于管理员本地覆盖）
+	ManagedOverrideFile string `mapstructure:"managed_override_file"`
 	// 覆盖补丁文件路径（可选）：条目按字段浅合并覆盖目录/回退数据，优先级最高
 	OverrideFile string `mapstructure:"override_file"`
 	// 更新间隔（小时）
@@ -2289,6 +2291,9 @@ func setDefaults() {
 	viper.SetDefault("pricing.hash_url", "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.sha256")
 	viper.SetDefault("pricing.data_dir", "./data")
 	viper.SetDefault("pricing.fallback_file", "./resources/model-pricing/model_prices_and_context_window.json")
+	// Version-controlled TToken baseline. The writable data-dir override remains
+	// the highest-priority layer, so upgrades never erase administrator changes.
+	viper.SetDefault("pricing.managed_override_file", "./resources/model-pricing/ttoken_model_pricing_overrides.json")
 	// Keep operator-maintained pricing overrides in the persistent data directory.
 	// The file may be absent; PricingService watches it and hot-reloads it when
 	// created or changed, so newly released models can be priced without a rebuild.

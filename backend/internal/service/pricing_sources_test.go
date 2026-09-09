@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,4 +125,65 @@ func TestDeepSeekSourceManifestMatchesRuntimePolicy(t *testing.T) {
 		require.Equal(t, "off_peak", entry.Schedule.Weekends)
 		require.Equal(t, 2.0, entry.Schedule.PeakMultiplier)
 	}
+}
+
+func TestManagedPricingBaselineContract(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "ttoken_model_pricing_overrides.json"))
+	require.NoError(t, err)
+	var entries map[string]map[string]any
+	require.NoError(t, json.Unmarshal(body, &entries))
+	require.Len(t, entries, 162)
+
+	videoEntries := 0
+	domesticEntries := 0
+	domesticProviders := map[string]bool{
+		"deepseek": true, "volcengine": true, "zhipu": true,
+		"moonshot": true, "minimax": true, "dashscope": true,
+	}
+	for model, entry := range entries {
+		require.NotEmpty(t, entry["litellm_provider"], model)
+		require.NotEmpty(t, entry["mode"], model)
+		if _, ok := entry["output_cost_per_video"]; ok {
+			videoEntries++
+		}
+		if provider, ok := entry["litellm_provider"].(string); ok && domesticProviders[provider] {
+			domesticEntries++
+		}
+	}
+	require.Equal(t, 16, videoEntries)
+	require.Equal(t, 21, domesticEntries)
+}
+
+func TestManagedPricingBaselinePrecedesLocalOverride(t *testing.T) {
+	dir := t.TempDir()
+	managedPath := filepath.Join(dir, "managed.json")
+	localPath := filepath.Join(dir, "local.json")
+	require.NoError(t, os.WriteFile(managedPath, []byte(`{
+		"test-model": {
+			"litellm_provider": "dashscope",
+			"mode": "chat",
+			"input_cost_per_token": 0.000001,
+			"output_cost_per_token": 0.000002
+		}
+	}`), 0600))
+	require.NoError(t, os.WriteFile(localPath, []byte(`{
+		"test-model": {"output_cost_per_token": 0.000009}
+	}`), 0600))
+
+	svc := &PricingService{cfg: &config.Config{Pricing: config.PricingConfig{
+		ManagedOverrideFile: managedPath,
+		OverrideFile:        localPath,
+	}}}
+	pricing, err := svc.parsePricingData([]byte(`{
+		"test-model": {
+			"litellm_provider": "original",
+			"mode": "chat",
+			"input_cost_per_token": 0.0000001,
+			"output_cost_per_token": 0.0000002
+		}
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, "dashscope", pricing["test-model"].LiteLLMProvider)
+	require.InDelta(t, 0.000001, pricing["test-model"].InputCostPerToken, 1e-15)
+	require.InDelta(t, 0.000009, pricing["test-model"].OutputCostPerToken, 1e-15)
 }

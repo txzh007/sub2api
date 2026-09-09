@@ -5,7 +5,8 @@ This directory contains a local copy of the mirrored model pricing data as a fal
 It also contains `model_price_sources.json`, TToken's auditable provenance manifest for
 domestic-model prices. The manifest is intentionally separate from the runtime price table:
 
-- `model_prices_and_context_window.json` and the writable override file determine billing.
+- `model_prices_and_context_window.json`, `ttoken_model_pricing_overrides.json`, and the
+  writable local override file determine billing in that priority order.
 - `model_price_sources.json` records where a price came from, when it was checked, its
   currency/unit, and whether it is official, an operator policy, or provisional.
 - `models.dev` is a discovery and cross-check source only. Its prices are USD and must not
@@ -47,5 +48,10 @@ The provenance manifest uses human-readable prices per one million tokens. Runti
 per-token numbers, so a manifest value of `6` corresponds to `0.000006` in the runtime table.
 Entries with `inherits` are aliases and inherit the price, provider, currency and unit from
 their target unless explicitly overridden.
+
+`ttoken_model_pricing_overrides.json` is the Git-managed deployable baseline. It contains
+the exact per-token/per-image/per-video values used by TToken. The administrator-managed
+`data/model_pricing_overrides.json` remains a separate, writable highest-priority layer, so
+an image upgrade can refresh the baseline without erasing local pricing decisions.
 
 Last updated: 2025-08-10

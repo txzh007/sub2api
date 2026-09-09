@@ -193,7 +193,7 @@ type PricingService struct {
 	pricingData     map[string]*LiteLLMModelPricing
 	lastUpdated     time.Time
 	localHash       string
-	// fallback/override 文件在最近一次成功重建时的内容指纹，定时器据此判断是否
+	// fallback/managed override/local override 文件在最近一次成功重建时的内容指纹，定时器据此判断是否
 	// 需要从本地目录缓存重建叠加层。
 	customFilesHash string
 
@@ -243,7 +243,7 @@ func (s *PricingService) Stop() {
 }
 
 // startUpdateScheduler 启动定时调度器：每个周期先做远程目录哈希同步（配置了 remote_url 时），
-// 再比对 fallback/override 文件指纹做本地热重载（配置了任一文件时）。两者都未配置则不启动。
+// 再比对 fallback/managed override/local override 文件指纹做本地热重载（配置了任一文件时）。
 func (s *PricingService) startUpdateScheduler() {
 	if s == nil || s.cfg == nil {
 		return
@@ -386,22 +386,36 @@ func (s *PricingService) syncWithRemote() error {
 	return nil
 }
 
-// hasCustomPricingFiles 报告是否配置了 fallback/override 任一文件路径（不要求文件存在）。
-func (s *PricingService) hasCustomPricingFiles() bool {
+// customPricingFilePaths 按合并顺序返回参与热重载指纹的价格文件。
+func (s *PricingService) customPricingFilePaths() []string {
 	if s == nil || s.cfg == nil {
-		return false
+		return nil
 	}
-	return strings.TrimSpace(s.cfg.Pricing.FallbackFile) != "" || strings.TrimSpace(s.cfg.Pricing.OverrideFile) != ""
+	return []string{
+		s.cfg.Pricing.FallbackFile,
+		s.cfg.Pricing.ManagedOverrideFile,
+		s.cfg.Pricing.OverrideFile,
+	}
 }
 
-// customPricingFilesFingerprint 返回 fallback、override 两个文件当前内容的联合 sha256。
+// hasCustomPricingFiles 报告是否配置了任一自定义价格文件路径（不要求文件存在）。
+func (s *PricingService) hasCustomPricingFiles() bool {
+	for _, path := range s.customPricingFilePaths() {
+		if strings.TrimSpace(path) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// customPricingFilesFingerprint 返回所有自定义价格文件当前内容的联合 sha256。
 // 每个文件以"长度前缀 + 正文"参与计算，不可读的文件按空正文处理；未配置任何文件返回空串。
 func (s *PricingService) customPricingFilesFingerprint() string {
 	if !s.hasCustomPricingFiles() {
 		return ""
 	}
 	h := sha256.New()
-	for _, path := range []string{s.cfg.Pricing.FallbackFile, s.cfg.Pricing.OverrideFile} {
+	for _, path := range s.customPricingFilePaths() {
 		var body []byte
 		if p := strings.TrimSpace(path); p != "" {
 			body, _ = os.ReadFile(p)
@@ -414,10 +428,10 @@ func (s *PricingService) customPricingFilesFingerprint() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// validateCustomPricingFiles 要求每个已配置且存在的 fallback/override 文件可读且为 JSON
+// validateCustomPricingFiles 要求每个已配置且存在的自定义价格文件可读且为 JSON
 // 对象，任一不满足即返回带路径的错误；文件不存在视为该层为空，属合法状态。
 func (s *PricingService) validateCustomPricingFiles() error {
-	for _, path := range []string{s.cfg.Pricing.FallbackFile, s.cfg.Pricing.OverrideFile} {
+	for _, path := range s.customPricingFilePaths() {
 		p := strings.TrimSpace(path)
 		if p == "" {
 			continue
@@ -832,8 +846,8 @@ func warnOrphanCacheTierFields(entries []string) {
 	logger.LegacyPrintf("service.pricing", "[Pricing] Warning: %d model(s) carry cache above-tier prices without a base cache price; that cache item bills at $0 until the catalog/override supplies the base: %s", total, strings.Join(entries, ", "))
 }
 
-// applyPricingOverrides 把 override 文件的条目逐字段修补进原始目录数据。目录与回退
-// 文件的解析都经过 parsePricingData，因此 override 是最高优先级的数据源。这里只修补
+// applyPricingOverrides 把受管基线和管理员本地 override 的条目逐字段修补进原始目录数据。
+// 目录与回退文件的解析都经过 parsePricingData；管理员本地层优先级最高。这里只修补
 // 已存在的条目：目录/回退里都没有的模型由 mergeOverrideOnlyModels 在两层数据合并后
 // 统一并入——若在此处抢先建条目，纯 override 条目会挡住回退文件中同名完整条目的合并。
 func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) map[string]json.RawMessage {
@@ -856,27 +870,52 @@ func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessag
 	return rawData
 }
 
-// loadPricingOverrideEntries 读取 override 文件的原始条目。未配置返回 nil；
-// 读取或解析失败打日志并跳过，不影响目录加载。
+// loadPricingOverrideEntries 合并 TToken 版本化受管基线与管理员本地覆盖。
+// 后加载的本地层按字段覆盖受管层；文件不存在视为空，其他读取/解析错误仅告警。
 func (s *PricingService) loadPricingOverrideEntries() map[string]json.RawMessage {
 	if s == nil || s.cfg == nil {
 		return nil
 	}
-	path := strings.TrimSpace(s.cfg.Pricing.OverrideFile)
-	if path == "" {
+	merged := make(map[string]json.RawMessage)
+	layers := []struct {
+		name string
+		path string
+	}{
+		{name: "managed override", path: s.cfg.Pricing.ManagedOverrideFile},
+		{name: "local override", path: s.cfg.Pricing.OverrideFile},
+	}
+	for _, layer := range layers {
+		path := strings.TrimSpace(layer.path)
+		if path == "" {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Warning: %s merge skipped: %v", layer.name, err)
+			continue
+		}
+		var entries map[string]json.RawMessage
+		if err := json.Unmarshal(body, &entries); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Warning: %s merge skipped: %v", layer.name, err)
+			continue
+		}
+		for model, patch := range entries {
+			if base, ok := merged[model]; ok {
+				if combined, valid := mergePricingOverrideEntry(base, patch); valid {
+					merged[model] = combined
+					continue
+				}
+			}
+			merged[model] = patch
+		}
+	}
+	if len(merged) == 0 {
 		return nil
 	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override merge skipped: %v", err)
-		return nil
-	}
-	var entries map[string]json.RawMessage
-	if err := json.Unmarshal(body, &entries); err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override merge skipped: %v", err)
-		return nil
-	}
-	return entries
+	return merged
 }
 
 // mergePricingOverrideEntry 在 JSON 字段层浅合并：patch 字段覆盖 base 同名字段，
@@ -950,7 +989,7 @@ func (s *PricingService) mergeOverrideOnlyModels(data map[string]*LiteLLMModelPr
 	return data
 }
 
-// buildPricingData 解析目录正文并依次叠加 fallback、override 两层，返回合并结果与
+// buildPricingData 解析目录正文并依次叠加 fallback、managed override、local override，返回合并结果与
 // 叠加层文件指纹。指纹在合并读取之前采样：并发改文件只会让存下的指纹落后于实际
 // 合并的数据、不会领先，下一轮定时比对因此会再次重建。
 func (s *PricingService) buildPricingData(body []byte) (map[string]*LiteLLMModelPricing, string, error) {

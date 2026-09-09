@@ -1074,6 +1074,10 @@ pricing:
   # detected by content hash at the next hash check and reloaded without restart.
   # 备用定价文件：只补目录缺失的模型。修改后在下一次哈希检查时按内容哈希自动重载，无需重启。
   fallback_file: "./resources/model-pricing/model_prices_and_context_window.json"
+  # Version-controlled TToken baseline pricing. This file is read-only and ships
+  # with each release; the writable override_file below still wins field-by-field.
+  # TToken 随版本发布的 Git 受管价格基线；此文件只读，下方管理员覆盖仍按字段优先。
+  managed_override_file: "./resources/model-pricing/ttoken_model_pricing_overrides.json"
   # Override patch file (optional, highest priority): entries are shallow-merged
   # field-by-field over catalog/fallback data; a null field value removes that field.
   # Model names must match catalog keys exactly. Edits are detected by content hash
