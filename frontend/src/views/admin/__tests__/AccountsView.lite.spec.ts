@@ -73,6 +73,11 @@ const AccountGroupsCellStub = defineComponent({
   template: '<span data-test="account-groups">{{ groups.map(group => group.name).join(",") }}</span>'
 })
 
+const AccountTableFiltersStub = defineComponent({
+  props: { groups: { type: Array, default: () => [] } },
+  template: '<span data-test="account-filter-groups">{{ groups.map(group => group.name).join(",") }}</span>'
+})
+
 const EditAccountModalStub = defineComponent({
   props: { show: Boolean, account: { type: Object, default: null } },
   template: '<div data-test="edit-account">{{ show ? account?.name : "" }}</div>'
@@ -97,7 +102,7 @@ function mountView(stubActionMenu = true) {
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,
         AccountTableActions: { template: '<div><slot name="after" /></div>' },
-        AccountTableFilters: true,
+        AccountTableFilters: AccountTableFiltersStub,
         AccountBulkActionsBar: true,
         Pagination: true,
         ConfirmDialog: true,
@@ -187,6 +192,28 @@ describe('admin AccountsView lite account list', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="account-groups"]').text()).toBe('codex')
+    expect(wrapper.get('[data-test="account-filter-groups"]').text()).toBe('codex')
+    wrapper.unmount()
+  })
+
+  it('does not show the dedicated image generation group in the account list', async () => {
+    listAccounts.mockResolvedValue({
+      items: [{ ...listRow, group_ids: [7, 24] }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+    getAllGroups.mockResolvedValue([
+      { id: 7, name: 'codex', platform: 'openai' },
+      { id: 24, name: '生图', platform: 'composite' }
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="account-groups"]').text()).toBe('codex')
+    expect(wrapper.get('[data-test="account-filter-groups"]').text()).toBe('codex')
     wrapper.unmount()
   })
 

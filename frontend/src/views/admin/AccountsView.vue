@@ -6,7 +6,7 @@
           <AccountTableFilters
             v-model:searchQuery="params.search"
             :filters="params"
-            :groups="groups"
+            :groups="accountListGroups"
             @update:filters="(newFilters) => Object.assign(params, newFilters)"
             @change="debouncedReload"
             @update:searchQuery="debouncedReload"
@@ -540,7 +540,8 @@ const authStore = useAuthStore()
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
-const groupsByID = computed(() => new Map(groups.value.map(group => [group.id, group])))
+const accountListGroups = computed(() => groups.value.filter(group => group.name.trim() !== '生图'))
+const groupsByID = computed(() => new Map(accountListGroups.value.map(group => [group.id, group])))
 const accountGroupsForRow = (account: Pick<AccountListItem, 'group_ids'>): AdminGroup[] => {
   const groupIDs = account.group_ids ?? []
   if (groupIDs.length === 0) return []

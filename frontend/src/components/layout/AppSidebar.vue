@@ -24,8 +24,10 @@
         >
           {{ siteName }}
         </router-link>
-        <!-- Version Badge -->
-        <VersionBadge :version="siteVersion" />
+        <!-- Keep the branded build version visible without checking the upstream Sub2API release feed. -->
+        <span v-if="siteVersion" class="text-xs text-gray-500 dark:text-dark-400">
+          v{{ siteVersion }}
+        </span>
       </div>
     </div>
 
@@ -192,7 +194,6 @@ import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
-import VersionBadge from '@/components/common/VersionBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'

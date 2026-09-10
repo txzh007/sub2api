@@ -82,6 +82,19 @@ func TestSettingHandler_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t 
 	require.True(t, resp.Data.ForceEmailOnThirdPartySignup)
 }
 
+func TestProvideSettingHandler_SetsVersionForInjectedConfig(t *testing.T) {
+	repo := &settingHandlerPublicRepoStub{values: map[string]string{}}
+	settingService := service.NewSettingService(repo, &config.Config{})
+
+	ProvideSettingHandler(settingService, BuildInfo{Version: "0.2.0"}, nil)
+
+	payload, err := settingService.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	injected, ok := payload.(*service.PublicSettingsInjectionPayload)
+	require.True(t, ok)
+	require.Equal(t, "0.2.0", injected.Version)
+}
+
 func TestSettingHandler_GetPublicSettings_ExposesTencentCaptchaConfiguration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

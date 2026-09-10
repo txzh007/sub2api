@@ -52,7 +52,11 @@ describe('AppSidebar collapsible groups', () => {
 })
 
 describe('AppSidebar header styles', () => {
-  it('does not clip the version badge dropdown', () => {
+  it('shows only the branded build version without the upstream update badge', () => {
+    expect(componentSource).toContain('v{{ siteVersion }}')
+    expect(componentSource).not.toContain('<VersionBadge')
+    expect(componentSource).not.toContain("import VersionBadge")
+
     const sidebarHeaderBlockMatch = styleSource.match(/\.sidebar-header\s*\{[\s\S]*?\n {2}\}/)
     const sidebarBrandBlockMatch = componentSource.match(/\.sidebar-brand\s*\{[\s\S]*?\n\}/)
 
