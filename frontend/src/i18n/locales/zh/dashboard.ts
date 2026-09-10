@@ -23,6 +23,7 @@ export default {
     selectedModels: '已选 {count} 个模型',
     noSelectedModels: '暂未选择模型',
     removeModel: '移除模型 {model}',
+    clearSelectedModels: '清空已选',
     groupModelsHint: '可用的桥接模型仍受“生图”分组模型列表设置限制。',
     advancedModels: '高级设置：手动填写 / 模型映射',
     manualModels: '手动填写与模型映射',

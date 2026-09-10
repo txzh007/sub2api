@@ -72,7 +72,17 @@
           <p v-if="modelsError" role="alert" class="mb-2 text-sm text-red-600">{{ modelsError }}</p>
           <div role="group" aria-labelledby="image-provider-models-label" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600" :aria-busy="fetchingModels">
             <div class="border-b border-gray-200 pb-3 dark:border-dark-600">
-              <p class="mb-2 text-sm font-medium">{{ t('imageProviders.selectedModels', { count: selectedModels.length }) }}</p>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <p class="text-sm font-medium">{{ t('imageProviders.selectedModels', { count: selectedModels.length }) }}</p>
+                <button
+                  type="button"
+                  class="text-sm text-gray-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-dark-400 dark:hover:text-red-400"
+                  :disabled="saving || fetchingModels || selectedModels.length === 0"
+                  @click="clearSelectedModels"
+                >
+                  {{ t('imageProviders.clearSelectedModels') }}
+                </button>
+              </div>
               <div v-if="selectedModels.length" class="flex flex-wrap gap-2">
                 <span v-for="model in selectedModels" :key="model.line" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">
                   <span class="break-all text-sm">{{ model.name }}<span v-if="model.name !== model.target" class="opacity-70"> → {{ model.target }}</span></span>
@@ -213,6 +223,7 @@ const selectedModels = computed(() => [...new Set(modelLines())].map(line => ({ 
 function modelLines() { return form.value.models.split('\n').map(line => line.trim()).filter(Boolean) }
 function modelTarget(line: string) { return line.includes('=') ? line.slice(line.indexOf('=') + 1).trim() : line }
 function removeSelectedModel(line: string) { form.value.models = modelLines().filter(value => value !== line).join('\n') }
+function clearSelectedModels() { form.value.models = '' }
 
 function toggleRemoteModel(model: string, checked: boolean) {
   const lines = modelLines()

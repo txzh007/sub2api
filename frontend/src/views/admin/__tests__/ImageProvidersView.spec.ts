@@ -141,6 +141,26 @@ describe('independent image providers', () => {
     expect(api.update).not.toHaveBeenCalled()
   })
 
+  it('clears all selected image models at once', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.create')!.trigger('click')
+    await wrapper.get('#image-provider-url').setValue('https://images.example/v1')
+    await wrapper.get('#image-provider-key').setValue('test-key')
+    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.fetchModels')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[value="gemini-3.1-flash-image"]').setValue(true)
+    await wrapper.get('input[value="gpt-image-2"]').setValue(true)
+
+    const clearButton = wrapper.findAll('button').find(button => button.text() === 'imageProviders.clearSelectedModels')!
+    expect(clearButton.attributes('disabled')).toBeUndefined()
+    await clearButton.trigger('click')
+
+    expect((wrapper.get('input[value="gemini-3.1-flash-image"]').element as HTMLInputElement).checked).toBe(false)
+    expect((wrapper.get('input[value="gpt-image-2"]').element as HTMLInputElement).checked).toBe(false)
+    expect(clearButton.attributes('disabled')).toBeDefined()
+  })
+
   it('uses the saved secret with an edited URL and reports fetch errors without losing mappings', async () => {
     const account = { id: 100, name: 'Images', platform: 'openai', concurrency: 3, credentials: { base_url: 'https://old.example', model_mapping: { 'gpt-image-2': 'gpt-image-2' } } }
     api.list.mockResolvedValue({ items: [account], total: 1 })

@@ -23,6 +23,7 @@ export default {
     selectedModels: '{count} models selected',
     noSelectedModels: 'No models selected',
     removeModel: 'Remove model {model}',
+    clearSelectedModels: 'Clear selection',
     groupModelsHint: 'The image group model list still limits available bridge models.',
     advancedModels: 'Advanced: manual entry / model mapping',
     manualModels: 'Manual entry and model mapping',
