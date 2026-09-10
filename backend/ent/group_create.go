@@ -190,6 +190,20 @@ func (_c *GroupCreate) SetNillableStatus(v *string) *GroupCreate {
 	return _c
 }
 
+// SetSystemRole sets the "system_role" field.
+func (_c *GroupCreate) SetSystemRole(v string) *GroupCreate {
+	_c.mutation.SetSystemRole(v)
+	return _c
+}
+
+// SetNillableSystemRole sets the "system_role" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableSystemRole(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetSystemRole(*v)
+	}
+	return _c
+}
+
 // SetDuplicateOperationID sets the "duplicate_operation_id" field.
 func (_c *GroupCreate) SetDuplicateOperationID(v string) *GroupCreate {
 	_c.mutation.SetDuplicateOperationID(v)
@@ -1075,6 +1089,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.SystemRole(); !ok {
+		v := group.DefaultSystemRole
+		_c.mutation.SetSystemRole(v)
+	}
 	if _, ok := _c.mutation.Platform(); !ok {
 		v := group.DefaultPlatform
 		_c.mutation.SetPlatform(v)
@@ -1264,6 +1282,14 @@ func (_c *GroupCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := group.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SystemRole(); !ok {
+		return &ValidationError{Name: "system_role", err: errors.New(`ent: missing required field "Group.system_role"`)}
+	}
+	if v, ok := _c.mutation.SystemRole(); ok {
+		if err := group.SystemRoleValidator(v); err != nil {
+			return &ValidationError{Name: "system_role", err: fmt.Errorf(`ent: validator failed for field "Group.system_role": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.DuplicateOperationID(); ok {
@@ -1492,6 +1518,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.SystemRole(); ok {
+		_spec.SetField(group.FieldSystemRole, field.TypeString, value)
+		_node.SystemRole = value
 	}
 	if value, ok := _c.mutation.DuplicateOperationID(); ok {
 		_spec.SetField(group.FieldDuplicateOperationID, field.TypeString, value)
@@ -2018,6 +2048,18 @@ func (u *GroupUpsert) SetStatus(v string) *GroupUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateStatus() *GroupUpsert {
 	u.SetExcluded(group.FieldStatus)
+	return u
+}
+
+// SetSystemRole sets the "system_role" field.
+func (u *GroupUpsert) SetSystemRole(v string) *GroupUpsert {
+	u.Set(group.FieldSystemRole, v)
+	return u
+}
+
+// UpdateSystemRole sets the "system_role" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateSystemRole() *GroupUpsert {
+	u.SetExcluded(group.FieldSystemRole)
 	return u
 }
 
@@ -3148,6 +3190,20 @@ func (u *GroupUpsertOne) SetStatus(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateStatus() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSystemRole sets the "system_role" field.
+func (u *GroupUpsertOne) SetSystemRole(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSystemRole(v)
+	})
+}
+
+// UpdateSystemRole sets the "system_role" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateSystemRole() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSystemRole()
 	})
 }
 
@@ -4594,6 +4650,20 @@ func (u *GroupUpsertBulk) SetStatus(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateStatus() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSystemRole sets the "system_role" field.
+func (u *GroupUpsertBulk) SetSystemRole(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetSystemRole(v)
+	})
+}
+
+// UpdateSystemRole sets the "system_role" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateSystemRole() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateSystemRole()
 	})
 }
 

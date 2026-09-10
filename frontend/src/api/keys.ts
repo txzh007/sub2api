@@ -150,7 +150,14 @@ export default keysAPI
 export interface ImageBridgeModels {
   group_id?: number
   group_name: string
+  default_model?: string
   models: string[]
+  availability: Array<{
+    model: string
+    available: boolean
+    reason?: 'no_provider' | 'account_inactive' | 'account_unschedulable' | 'wrong_account_purpose' | 'not_in_group_allowlist' | 'temporarily_unavailable'
+  }>
+  group_unavailable?: boolean
 }
 
 export async function getImageBridgeModels(): Promise<ImageBridgeModels> {

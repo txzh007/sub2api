@@ -540,7 +540,7 @@ const authStore = useAuthStore()
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
-const accountListGroups = computed(() => groups.value.filter(group => group.name.trim() !== '生图'))
+const accountListGroups = computed(() => groups.value.filter(group => group.system_role !== 'image_generation'))
 const groupsByID = computed(() => new Map(accountListGroups.value.map(group => [group.id, group])))
 const accountGroupsForRow = (account: Pick<AccountListItem, 'group_ids'>): AdminGroup[] => {
   const groupIDs = account.group_ids ?? []

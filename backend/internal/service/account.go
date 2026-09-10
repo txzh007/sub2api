@@ -26,6 +26,7 @@ type Account struct {
 	Notes                   *string
 	Platform                string
 	Type                    string
+	Purpose                 string
 	Credentials             map[string]any
 	Extra                   map[string]any
 	ProxyID                 *int64
@@ -82,6 +83,22 @@ type Account struct {
 	headerOverrideCacheRawPtr         uintptr
 	headerOverrideCacheRawLen         int
 	headerOverrideCacheRawSig         uint64
+}
+
+const (
+	AccountPurposeGeneral       = "general"
+	AccountPurposeImageProvider = "image_provider"
+)
+
+func NormalizeAccountPurpose(value string) string {
+	if strings.TrimSpace(value) == AccountPurposeImageProvider {
+		return AccountPurposeImageProvider
+	}
+	return AccountPurposeGeneral
+}
+
+func (a *Account) IsImageProvider() bool {
+	return a != nil && NormalizeAccountPurpose(a.Purpose) == AccountPurposeImageProvider
 }
 
 type OpenAIEndpointCapability string

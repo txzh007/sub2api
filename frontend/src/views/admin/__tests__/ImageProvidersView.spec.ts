@@ -18,7 +18,7 @@ const render = () => mount(ImageProvidersView, { global: { stubs: {
 describe('independent image providers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    api.groups.mockResolvedValue([{ id: 24, name: '生图', status: 'active', allow_image_generation: true }])
+    api.groups.mockResolvedValue([{ id: 24, name: '生图', system_role: 'image_generation', status: 'active', allow_image_generation: true }])
     api.list.mockResolvedValue({ items: [], total: 0 })
     api.create.mockResolvedValue({ id: 100 })
     api.copy.mockResolvedValue({ id: 102, name: 'Source (Copy)' })
@@ -47,7 +47,7 @@ describe('independent image providers', () => {
     await wrapper.get('input[value="gpt-image-2"]').setValue(true)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ platform: 'openai', type: 'apikey', group_ids: [24],
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ platform: 'openai', type: 'apikey', purpose: 'image_provider', group_ids: [24],
       credentials: { base_url: 'https://images.example/v1', api_key: 'test-secret', model_mapping: {
         'gemini-3.1-flash-image': 'gemini-3.1-flash-image', 'gpt-image-2': 'gpt-image-2'
       } }
@@ -55,7 +55,7 @@ describe('independent image providers', () => {
   })
 
   it('keeps Grok image accounts visible in the provider list', async () => {
-    api.list.mockResolvedValue({ items: [{ id: 101, name: 'Grok Images', platform: 'grok', status: 'active', schedulable: true }], total: 1 })
+    api.list.mockResolvedValue({ items: [{ id: 101, name: 'Grok Images', platform: 'grok', purpose: 'image_provider', status: 'active', schedulable: true }], total: 1 })
     const wrapper = render()
     await flushPromises()
     expect(wrapper.text()).toContain('common.edit')
@@ -87,7 +87,7 @@ describe('independent image providers', () => {
   })
 
   it('preserves existing credentials and settings when editing without a new key', async () => {
-    const account = { id: 100, name: 'Images', platform: 'openai', type: 'apikey', concurrency: 3,
+    const account = { id: 100, name: 'Images', platform: 'openai', type: 'apikey', purpose: 'image_provider', concurrency: 3,
       credentials: { base_url: 'https://old.example', model_mapping: { 'gpt-image-2': 'gpt-image-2' }, custom_setting: true } }
     api.list.mockResolvedValue({ items: [account], total: 1 })
     api.get.mockResolvedValue(account)
@@ -107,7 +107,7 @@ describe('independent image providers', () => {
   })
 
   it('enables scheduling through the dedicated endpoint', async () => {
-    api.list.mockResolvedValue({ items: [{ id: 100, name: 'Images', platform: 'openai', status: 'inactive', schedulable: false }], total: 1 })
+    api.list.mockResolvedValue({ items: [{ id: 100, name: 'Images', platform: 'openai', purpose: 'image_provider', status: 'inactive', schedulable: false }], total: 1 })
     const wrapper = render()
     await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === 'imageProviders.enable')!.trigger('click')
@@ -159,10 +159,18 @@ describe('independent image providers', () => {
     expect((wrapper.get('input[value="gemini-3.1-flash-image"]').element as HTMLInputElement).checked).toBe(false)
     expect((wrapper.get('input[value="gpt-image-2"]').element as HTMLInputElement).checked).toBe(false)
     expect(clearButton.attributes('disabled')).toBeDefined()
+
+    await wrapper.get('#image-provider-name').setValue('Images without models')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
+      purpose: 'image_provider',
+      credentials: expect.objectContaining({ model_mapping: {} })
+    }))
   })
 
   it('uses the saved secret with an edited URL and reports fetch errors without losing mappings', async () => {
-    const account = { id: 100, name: 'Images', platform: 'openai', concurrency: 3, credentials: { base_url: 'https://old.example', model_mapping: { 'gpt-image-2': 'gpt-image-2' } } }
+    const account = { id: 100, name: 'Images', platform: 'openai', purpose: 'image_provider', concurrency: 3, credentials: { base_url: 'https://old.example', model_mapping: { 'gpt-image-2': 'gpt-image-2' } } }
     api.list.mockResolvedValue({ items: [account], total: 1 })
     api.get.mockResolvedValue(account)
     api.preview.mockRejectedValue({ status: 502, message: 'Upstream HTTP 401' })
@@ -197,7 +205,7 @@ describe('independent image providers', () => {
   })
 
   it('requires confirmation before deleting and refreshes the list after success', async () => {
-    const account = { id: 100, name: 'Images', platform: 'openai', status: 'active', schedulable: true }
+    const account = { id: 100, name: 'Images', platform: 'openai', purpose: 'image_provider', status: 'active', schedulable: true }
     api.list.mockResolvedValue({ items: [account], total: 1 })
     const wrapper = render()
     await flushPromises()
@@ -220,7 +228,7 @@ describe('independent image providers', () => {
   })
 
   it('retains the confirmation and shows an error when deletion fails', async () => {
-    api.list.mockResolvedValue({ items: [{ id: 100, name: 'Images', platform: 'openai', status: 'active', schedulable: true }], total: 1 })
+    api.list.mockResolvedValue({ items: [{ id: 100, name: 'Images', platform: 'openai', purpose: 'image_provider', status: 'active', schedulable: true }], total: 1 })
     api.remove.mockRejectedValue({ message: 'Delete failed' })
     const wrapper = render()
     await flushPromises()

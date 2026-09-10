@@ -33,11 +33,11 @@ func (u *geminiImagesTestUpstream) Do(r *http.Request, _ string, _ int64, _ int)
 
 func newGeminiImagesTestHandler(t *testing.T, platform string, upstream func(*http.Request) (*http.Response, error)) (*GatewayHandler, *service.APIKey) {
 	t.Helper()
-	group := &service.Group{ID: 42, Name: service.ImageBridgeGroupName, Platform: platform, Status: service.StatusActive, Hydrated: true, AllowImageGeneration: true}
+	group := &service.Group{ID: 42, Name: service.ImageBridgeGroupName, SystemRole: service.GroupSystemRoleImageGeneration, Platform: platform, Status: service.StatusActive, Hydrated: true, AllowImageGeneration: true}
 	if platform == service.PlatformOpenAI {
 		group.Platform = service.PlatformGemini
 	}
-	account := &service.Account{ID: 9, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{42}, Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{service.DefaultGeminiImageModel: service.DefaultGeminiImageModel}}}
+	account := &service.Account{ID: 9, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Purpose: service.AccountPurposeImageProvider, Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{42}, Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{service.DefaultGeminiImageModel: service.DefaultGeminiImageModel}}}
 	h, cleanup := newTestGatewayHandler(t, group, []*service.Account{account})
 	t.Cleanup(cleanup)
 	h.cfg = &config.Config{RunMode: config.RunModeSimple}
@@ -57,6 +57,10 @@ type bridgeAccountRepo struct {
 }
 
 func (r *bridgeAccountRepo) ListSchedulableByGroupID(context.Context, int64) ([]service.Account, error) {
+	return []service.Account{*r.account}, nil
+}
+
+func (r *bridgeAccountRepo) ListByGroup(context.Context, int64) ([]service.Account, error) {
 	return []service.Account{*r.account}, nil
 }
 
@@ -199,6 +203,7 @@ func TestGeminiImagesCodexForcedToolAndReferences(t *testing.T) {
 		require.Equal(t, "cmVm", gjson.GetBytes(body, "contents.0.parts.1.inlineData.data").String())
 		return geminiTestImageResponse(), nil
 	})
+	h.cfg.Gateway.CodexGeminiImageModel = service.DefaultGeminiImageModel
 	c, w := geminiImagesTestContext(key, "/responses", `{"model":"gpt-5.4","input":[{"role":"user","content":[{"type":"input_text","text":"edit this cat"},{"type":"input_image","image_url":"data:image/png;base64,cmVm"}]}],"tools":[{"type":"image_generation","model":"gemini-3.1-flash-image","action":"edit"}],"tool_choice":{"type":"image_generation"}}`)
 	h.WrapGeminiImageResponses(func(*gin.Context) { t.Fatal("forced tool must skip the text model") }, service.NewCompositeRouteResolver(nil))(c)
 	require.Equal(t, 200, w.Code, w.Body.String())
@@ -239,7 +244,6 @@ func TestGeminiImagesCodexHistoryAndTextToolEvents(t *testing.T) {
 		return nil, nil
 	})
 	h.cfg.Gateway.CodexGeminiImageModel = service.DefaultGeminiImageModel
-	h.apiKeyService = nil // Ordinary text/tools must not depend on image availability.
 	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":[{"id":"ig_sub2api_previous","type":"image_generation_call","result":"aW1hZ2U="},{"role":"user","content":"save this file"}],"stream":true}`)
 	c.Request.Header.Set("User-Agent", "codex_cli_rs")
 	h.WrapGeminiImageResponses(func(child *gin.Context) {

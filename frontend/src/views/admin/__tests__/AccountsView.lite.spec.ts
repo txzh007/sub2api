@@ -206,7 +206,7 @@ describe('admin AccountsView lite account list', () => {
     })
     getAllGroups.mockResolvedValue([
       { id: 7, name: 'codex', platform: 'openai' },
-      { id: 24, name: '生图', platform: 'composite' }
+      { id: 24, name: '生图', platform: 'composite', system_role: 'image_generation' }
     ])
 
     const wrapper = mountView()

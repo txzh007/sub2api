@@ -3,7 +3,7 @@ services:
     extends:
       file: docker-compose.yml
       service: sub2api
-    image: ghcr.io/txzh007/ttoken:0.2.0
+    image: ghcr.io/txzh007/ttoken:0.3.0
     platform: linux/amd64
     container_name: ttoken-green
     ports: !override

@@ -54,3 +54,19 @@ func TestImageProviderModelMappingUsesImageDefaultsWhenMappingIsEmpty(t *testing
 	require.Contains(t, geminiModels, "gemini-3.1-flash-image")
 	require.NotContains(t, geminiModels, "gemini-3.1-pro-preview")
 }
+
+func TestValidateImageProviderModelMappingAllowsEmptyAndRejectsTextOrVideo(t *testing.T) {
+	require.NoError(t, ValidateImageProviderModelMapping(nil))
+	require.NoError(t, ValidateImageProviderModelMapping(map[string]string{
+		"draw": "grok-imagine-image-2.0",
+	}))
+	require.ErrorContains(t, ValidateImageProviderModelMapping(map[string]string{
+		"grok-4.6": "grok-4.6",
+	}), "not a still-image model")
+	require.ErrorContains(t, ValidateImageProviderModelMapping(map[string]string{
+		"grok-imagine-video-1.5": "grok-imagine-video-1.5",
+	}), "not a still-image model")
+	require.Error(t, ValidateImageProviderModelMapping(map[string]string{
+		"gpt-*": "gpt-image-2",
+	}))
+}

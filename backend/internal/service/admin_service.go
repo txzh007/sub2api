@@ -398,6 +398,7 @@ type CreateAccountInput struct {
 	Notes              *string
 	Platform           string
 	Type               string
+	Purpose            string
 	Credentials        map[string]any
 	Extra              map[string]any
 	ProxyID            *int64
@@ -429,6 +430,7 @@ type UpdateAccountInput struct {
 	Name                  string
 	Notes                 *string
 	Type                  string // Account type: oauth, setup-token, apikey
+	Purpose               *string
 	Credentials           map[string]any
 	Extra                 map[string]any
 	ProxyID               *int64

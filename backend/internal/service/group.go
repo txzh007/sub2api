@@ -29,6 +29,7 @@ type Group struct {
 	PeakRateMultiplier float64
 	IsExclusive        bool
 	Status             string
+	SystemRole         string
 	Hydrated           bool // indicates the group was loaded from a trusted repository source
 	// DuplicateOperationID is internal persistence metadata used only to recover
 	// an already committed one-click copy. It must never be mapped to API DTOs.
@@ -139,6 +140,15 @@ type Group struct {
 	AccountCount            int64
 	ActiveAccountCount      int64
 	RateLimitedAccountCount int64
+}
+
+const (
+	GroupSystemRoleNone            = ""
+	GroupSystemRoleImageGeneration = "image_generation"
+)
+
+func (g *Group) IsImageGenerationGroup() bool {
+	return g != nil && g.SystemRole == GroupSystemRoleImageGeneration
 }
 
 // IsGroupBindableInSimpleMode is the shared policy for groups that may be

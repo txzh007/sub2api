@@ -70,6 +70,10 @@ func (Account) Fields() []ent.Field {
 		field.String("type").
 			MaxLen(20).
 			NotEmpty(),
+		field.String("purpose").
+			MaxLen(32).
+			Default("general").
+			Comment("Operational purpose: general or image_provider"),
 
 		// credentials: 认证凭证，以 JSONB 格式存储
 		// 结构取决于 type 字段：
@@ -236,6 +240,7 @@ func (Account) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("platform"),            // 按平台筛选
 		index.Fields("type"),                // 按认证类型筛选
+		index.Fields("purpose"),             // 按独立用途筛选
 		index.Fields("status"),              // 按状态筛选
 		index.Fields("proxy_id"),            // 按代理筛选
 		index.Fields("priority"),            // 按优先级排序

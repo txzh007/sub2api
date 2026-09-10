@@ -115,6 +115,11 @@ func Status(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldStatus, v))
 }
 
+// SystemRole applies equality check predicate on the "system_role" field. It's identical to SystemRoleEQ.
+func SystemRole(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSystemRole, v))
+}
+
 // DuplicateOperationID applies equality check predicate on the "duplicate_operation_id" field. It's identical to DuplicateOperationIDEQ.
 func DuplicateOperationID(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDuplicateOperationID, v))
@@ -908,6 +913,71 @@ func StatusEqualFold(v string) predicate.Group {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// SystemRoleEQ applies the EQ predicate on the "system_role" field.
+func SystemRoleEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldSystemRole, v))
+}
+
+// SystemRoleNEQ applies the NEQ predicate on the "system_role" field.
+func SystemRoleNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldSystemRole, v))
+}
+
+// SystemRoleIn applies the In predicate on the "system_role" field.
+func SystemRoleIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldSystemRole, vs...))
+}
+
+// SystemRoleNotIn applies the NotIn predicate on the "system_role" field.
+func SystemRoleNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldSystemRole, vs...))
+}
+
+// SystemRoleGT applies the GT predicate on the "system_role" field.
+func SystemRoleGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldSystemRole, v))
+}
+
+// SystemRoleGTE applies the GTE predicate on the "system_role" field.
+func SystemRoleGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldSystemRole, v))
+}
+
+// SystemRoleLT applies the LT predicate on the "system_role" field.
+func SystemRoleLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldSystemRole, v))
+}
+
+// SystemRoleLTE applies the LTE predicate on the "system_role" field.
+func SystemRoleLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldSystemRole, v))
+}
+
+// SystemRoleContains applies the Contains predicate on the "system_role" field.
+func SystemRoleContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldSystemRole, v))
+}
+
+// SystemRoleHasPrefix applies the HasPrefix predicate on the "system_role" field.
+func SystemRoleHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldSystemRole, v))
+}
+
+// SystemRoleHasSuffix applies the HasSuffix predicate on the "system_role" field.
+func SystemRoleHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldSystemRole, v))
+}
+
+// SystemRoleEqualFold applies the EqualFold predicate on the "system_role" field.
+func SystemRoleEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldSystemRole, v))
+}
+
+// SystemRoleContainsFold applies the ContainsFold predicate on the "system_role" field.
+func SystemRoleContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldSystemRole, v))
 }
 
 // DuplicateOperationIDEQ applies the EQ predicate on the "duplicate_operation_id" field.

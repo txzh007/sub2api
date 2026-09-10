@@ -35,11 +35,11 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			next(c)
 			return
 		}
-		if key.ImageBridgeModel != nil && strings.TrimSpace(*key.ImageBridgeModel) == "" {
+		model, bridgeEnabled := h.apiKeyService.EffectiveImageBridgeModel(key)
+		if !bridgeEnabled {
 			next(c)
 			return
 		}
-		perKey := key.ImageBridgeModel != nil
 		body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 		if err != nil {
 			status := http.StatusBadRequest
@@ -56,22 +56,8 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			return
 		}
 		tool, hasTool := findGeminiBridgeImageTool(request)
-		model, _ := tool["model"].(string)
 		requestModel, _ := request["model"].(string)
-		directImage := strings.HasPrefix(requestModel, "gemini-") && strings.Contains(requestModel, "-image")
-		if directImage {
-			model = requestModel
-		}
-		configured := ""
-		if h.cfg != nil {
-			configured = strings.TrimSpace(h.cfg.Gateway.CodexGeminiImageModel)
-		}
-		if !strings.HasPrefix(model, "gemini-") {
-			model = configured
-		}
-		if perKey {
-			model = strings.TrimSpace(*key.ImageBridgeModel)
-		}
+		directImage := service.IsImageProviderModel(requestModel)
 		codex := strings.Contains(strings.ToLower(c.GetHeader("User-Agent")), "codex") || strings.Contains(strings.ToLower(c.GetHeader("originator")), "codex")
 		if model == "" || (!hasTool && !codex && !directImage) {
 			next(c)

@@ -40,6 +40,8 @@ const (
 	FieldIsExclusive = "is_exclusive"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldSystemRole holds the string denoting the system_role field in the database.
+	FieldSystemRole = "system_role"
 	// FieldDuplicateOperationID holds the string denoting the duplicate_operation_id field in the database.
 	FieldDuplicateOperationID = "duplicate_operation_id"
 	// FieldPlatform holds the string denoting the platform field in the database.
@@ -235,6 +237,7 @@ var Columns = []string{
 	FieldPeakRateMultiplier,
 	FieldIsExclusive,
 	FieldStatus,
+	FieldSystemRole,
 	FieldDuplicateOperationID,
 	FieldPlatform,
 	FieldSubscriptionType,
@@ -346,6 +349,10 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultSystemRole holds the default value on creation for the "system_role" field.
+	DefaultSystemRole string
+	// SystemRoleValidator is a validator for the "system_role" field. It is called by the builders before save.
+	SystemRoleValidator func(string) error
 	// DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
 	DuplicateOperationIDValidator func(string) error
 	// DefaultPlatform holds the default value on creation for the "platform" field.
@@ -502,6 +509,11 @@ func ByIsExclusive(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// BySystemRole orders the results by the system_role field.
+func BySystemRole(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSystemRole, opts...).ToFunc()
 }
 
 // ByDuplicateOperationID orders the results by the duplicate_operation_id field.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"strconv"
-	"strings"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -52,7 +51,7 @@ func (h *AccountHandler) CopyToImageProvider(c *gin.Context) {
 		if groupErr != nil {
 			return nil, groupErr
 		}
-		if group == nil || strings.TrimSpace(group.Name) != "生图" || !group.AllowImageGeneration {
+		if group == nil || !group.IsImageGenerationGroup() || !group.AllowImageGeneration {
 			return nil, infraerrors.BadRequest(
 				"IMAGE_PROVIDER_COPY_GROUP_INVALID",
 				"target group must be the image generation group",
@@ -112,8 +111,10 @@ func (h *AccountHandler) bindCopiedImageProvider(ctx context.Context, copied *se
 	credentials["model_mapping"] = serializedMapping
 
 	groupIDs := []int64{groupID}
+	purpose := service.AccountPurposeImageProvider
 	updated, err := h.adminService.UpdateAccount(ctx, copied.ID, &service.UpdateAccountInput{
 		Credentials:           credentials,
+		Purpose:               &purpose,
 		GroupIDs:              &groupIDs,
 		SkipMixedChannelCheck: true,
 	})

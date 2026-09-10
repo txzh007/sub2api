@@ -167,6 +167,7 @@ type Group struct {
 // 注意：普通用户接口不得返回 model_routing/account_count/account_groups 等内部信息。
 type AdminGroup struct {
 	Group
+	SystemRole string `json:"system_role"`
 	// ForceOpenAIFast 是管理端请求策略，用户侧分组 DTO 无需暴露。
 	ForceOpenAIFast bool `json:"force_openai_fast"`
 	// FreeOpenAIFast 是管理端计费策略，用户侧分组 DTO 无需暴露。
@@ -211,6 +212,7 @@ type Account struct {
 	Notes    *string `json:"notes"`
 	Platform string  `json:"platform"`
 	Type     string  `json:"type"`
+	Purpose  string  `json:"purpose"`
 	// Credentials 经 RedactCredentials 处理后只含非敏感子键；敏感 token / api_key / 私钥
 	// 的存在性通过 CredentialsStatus（has_<key>）暴露，原始值不返回前端。
 	Credentials             map[string]any                 `json:"credentials"`
@@ -336,6 +338,7 @@ type AccountListItem struct {
 	Notes    *string `json:"notes"`
 	Platform string  `json:"platform"`
 	Type     string  `json:"type"`
+	Purpose  string  `json:"purpose"`
 
 	Credentials       map[string]any                 `json:"credentials,omitempty"`
 	CredentialsStatus map[string]bool                `json:"credentials_status,omitempty"`

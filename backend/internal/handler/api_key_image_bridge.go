@@ -77,11 +77,16 @@ func (h *GatewayHandler) dispatchImageBridge(c *gin.Context, platform string) {
 func (h *GatewayHandler) WrapKeyImageBridge(next gin.HandlerFunc, resolver *service.CompositeRouteResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key, ok := middleware.GetAPIKeyFromContext(c)
-		if !ok || !service.KeySupportsImageBridge(key) || key.ImageBridgeModel == nil || strings.TrimSpace(*key.ImageBridgeModel) == "" {
+		if !ok || !service.KeySupportsImageBridge(key) {
 			next(c)
 			return
 		}
-		binding, err := h.resolveKeyImageBridge(c, key, *key.ImageBridgeModel, resolver)
+		model, enabled := h.apiKeyService.EffectiveImageBridgeModel(key)
+		if !enabled {
+			next(c)
+			return
+		}
+		binding, err := h.resolveKeyImageBridge(c, key, model, resolver)
 		if err != nil {
 			h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return

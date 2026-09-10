@@ -1,11 +1,31 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
+
+// ValidateImageProviderModelMapping prevents dedicated image providers from
+// accidentally exposing text or video models. An empty mapping is valid and
+// leaves the provider configured but unavailable until models are selected.
+func ValidateImageProviderModelMapping(mapping map[string]string) error {
+	for requestedModel, upstreamModel := range mapping {
+		if strings.Contains(requestedModel, "*") || strings.TrimSpace(requestedModel) == "" {
+			return infraerrors.BadRequest("IMAGE_PROVIDER_MODEL_INVALID", "image provider model aliases must be explicit and non-empty")
+		}
+		if !IsImageProviderModel(requestedModel) && !IsImageProviderModel(upstreamModel) {
+			return infraerrors.BadRequest(
+				"IMAGE_PROVIDER_MODEL_INVALID",
+				fmt.Sprintf("%s is not a still-image model", requestedModel),
+			)
+		}
+	}
+	return nil
+}
 
 // IsImageProviderModel reports whether model is a still-image generation model.
 // Video models are intentionally excluded from the dedicated image-provider list.

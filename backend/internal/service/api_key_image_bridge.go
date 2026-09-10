@@ -10,6 +10,15 @@ import (
 
 const ImageBridgeGroupName = "生图"
 
+const (
+	ImageBridgeUnavailableNoProvider           = "no_provider"
+	ImageBridgeUnavailableAccountInactive      = "account_inactive"
+	ImageBridgeUnavailableAccountUnschedulable = "account_unschedulable"
+	ImageBridgeUnavailableWrongPurpose         = "wrong_account_purpose"
+	ImageBridgeUnavailableNotAllowed           = "not_in_group_allowlist"
+	ImageBridgeUnavailableTemporary            = "temporarily_unavailable"
+)
+
 func KeySupportsImageBridge(key *APIKey) bool {
 	return key != nil && key.Group != nil && key.Group.Platform == PlatformOpenAI
 }
@@ -22,9 +31,36 @@ func validateImageBridgePrimaryGroup(group *Group) error {
 }
 
 type ImageBridgeModels struct {
-	GroupID   int64    `json:"group_id,omitempty"`
-	GroupName string   `json:"group_name"`
-	Models    []string `json:"models"`
+	GroupID          int64                          `json:"group_id,omitempty"`
+	GroupName        string                         `json:"group_name"`
+	DefaultModel     string                         `json:"default_model,omitempty"`
+	Models           []string                       `json:"models"`
+	Availability     []ImageBridgeModelAvailability `json:"availability"`
+	GroupUnavailable bool                           `json:"group_unavailable,omitempty"`
+}
+
+type ImageBridgeModelAvailability struct {
+	Model     string `json:"model"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// EffectiveImageBridgeModel applies the same persisted selection semantics to
+// every bridge endpoint: empty disables, a concrete value pins the model, and
+// nil inherits the server default.
+func (s *APIKeyService) EffectiveImageBridgeModel(key *APIKey) (string, bool) {
+	if key == nil {
+		return "", false
+	}
+	if key.ImageBridgeModel != nil {
+		model := strings.TrimSpace(*key.ImageBridgeModel)
+		return model, model != ""
+	}
+	if s == nil || s.cfg == nil {
+		return "", false
+	}
+	model := strings.TrimSpace(s.cfg.Gateway.CodexGeminiImageModel)
+	return model, model != ""
 }
 
 // The image group remains the source of model availability, access and pricing.
@@ -35,24 +71,33 @@ func (s *APIKeyService) imageBridgeGroup(ctx context.Context, userID int64) (*Gr
 		return nil, err
 	}
 	for i := range groups {
-		if groups[i].Name == ImageBridgeGroupName && GroupAllowsImageGeneration(&groups[i]) {
+		if groups[i].IsImageGenerationGroup() && GroupAllowsImageGeneration(&groups[i]) {
 			return s.groupRepo.GetByID(ctx, groups[i].ID)
 		}
 	}
 	return nil, nil
 }
 
-func (s *APIKeyService) imageBridgeModelsForGroup(ctx context.Context, group *Group) ([]string, error) {
-	models := []string{}
+func (s *APIKeyService) imageBridgeModelAvailabilityForGroup(ctx context.Context, group *Group) ([]ImageBridgeModelAvailability, error) {
+	availability := []ImageBridgeModelAvailability{}
 	if group == nil || s.imageBridgeAccounts == nil {
-		return models, nil
+		return availability, nil
 	}
-	accounts, err := s.imageBridgeAccounts.ListSchedulableByGroupID(ctx, group.ID)
+	allAccounts, err := s.imageBridgeAccounts.ListByGroup(ctx, group.ID)
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	for _, account := range accounts {
+	schedulableAccounts, err := s.imageBridgeAccounts.ListSchedulableByGroupID(ctx, group.ID)
+	if err != nil {
+		return nil, err
+	}
+	schedulableIDs := make(map[int64]struct{}, len(schedulableAccounts))
+	for i := range schedulableAccounts {
+		schedulableIDs[schedulableAccounts[i].ID] = struct{}{}
+	}
+
+	providersByModel := map[string][]Account{}
+	for _, account := range allAccounts {
 		if account.Platform != PlatformGemini && account.Platform != PlatformOpenAI && account.Platform != PlatformGrok {
 			continue
 		}
@@ -63,24 +108,83 @@ func (s *APIKeyService) imageBridgeModelsForGroup(ctx context.Context, group *Gr
 			if strings.Contains(model, "*") || strings.TrimSpace(model) == "" {
 				continue
 			}
-			if !isBridgeImageModel(model) && !isBridgeImageModel(target) {
+			if !IsImageProviderModel(model) && !IsImageProviderModel(target) {
 				continue
 			}
-			seen[model] = true
+			providersByModel[model] = append(providersByModel[model], account)
 		}
 	}
-	if group.ModelAllowlist.Enabled && len(group.ModelAllowlist.Models) > 0 {
+
+	candidates := map[string]struct{}{}
+	for model := range providersByModel {
+		candidates[model] = struct{}{}
+	}
+	if group.ModelAllowlistEnabled() {
 		for _, model := range group.ModelAllowlist.Models {
-			if seen[model] {
-				models = append(models, model)
+			if !strings.Contains(model, "*") && IsImageProviderModel(model) {
+				candidates[model] = struct{}{}
 			}
 		}
-	} else {
-		for model := range seen {
-			models = append(models, model)
-		}
+	}
+
+	models := make([]string, 0, len(candidates))
+	for model := range candidates {
+		models = append(models, model)
 	}
 	sort.Strings(models)
+	for _, model := range models {
+		status := ImageBridgeModelAvailability{Model: model}
+		providers := providersByModel[model]
+		if len(providers) == 0 {
+			status.Reason = ImageBridgeUnavailableNoProvider
+			availability = append(availability, status)
+			continue
+		}
+		if group.ModelAllowlistEnabled() && !group.ModelAllowlist.Allows(model) {
+			status.Reason = ImageBridgeUnavailableNotAllowed
+			availability = append(availability, status)
+			continue
+		}
+		reason := ImageBridgeUnavailableTemporary
+		for i := range providers {
+			provider := &providers[i]
+			if !provider.IsImageProvider() {
+				reason = ImageBridgeUnavailableWrongPurpose
+				continue
+			}
+			if provider.Status != StatusActive {
+				reason = ImageBridgeUnavailableAccountInactive
+				continue
+			}
+			if !provider.Schedulable {
+				reason = ImageBridgeUnavailableAccountUnschedulable
+				continue
+			}
+			if _, ok := schedulableIDs[provider.ID]; ok {
+				status.Available = true
+				status.Reason = ""
+				break
+			}
+		}
+		if !status.Available {
+			status.Reason = reason
+		}
+		availability = append(availability, status)
+	}
+	return availability, nil
+}
+
+func (s *APIKeyService) imageBridgeModelsForGroup(ctx context.Context, group *Group) ([]string, error) {
+	availability, err := s.imageBridgeModelAvailabilityForGroup(ctx, group)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(availability))
+	for _, item := range availability {
+		if item.Available {
+			models = append(models, item.Model)
+		}
+	}
 	return models, nil
 }
 
@@ -128,13 +232,24 @@ func (s *APIKeyService) GetImageBridgeModels(ctx context.Context, userID int64) 
 	if err != nil {
 		return nil, err
 	}
-	models, err := s.imageBridgeModelsForGroup(ctx, group)
+	availability, err := s.imageBridgeModelAvailabilityForGroup(ctx, group)
 	if err != nil {
 		return nil, err
 	}
-	result := &ImageBridgeModels{GroupName: ImageBridgeGroupName, Models: models}
+	result := &ImageBridgeModels{GroupName: ImageBridgeGroupName, Availability: availability}
+	if s.cfg != nil {
+		result.DefaultModel = strings.TrimSpace(s.cfg.Gateway.CodexGeminiImageModel)
+	}
 	if group != nil {
 		result.GroupID = group.ID
+		result.GroupName = group.Name
+		for _, item := range availability {
+			if item.Available {
+				result.Models = append(result.Models, item.Model)
+			}
+		}
+	} else {
+		result.GroupUnavailable = true
 	}
 	return result, nil
 }

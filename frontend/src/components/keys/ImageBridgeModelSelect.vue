@@ -18,6 +18,9 @@
     <p v-else-if="models.length === 0" class="text-xs text-amber-600 dark:text-amber-400">
       {{ t('keys.imageBridgeEmpty') }}
     </p>
+    <p v-if="selectedUnavailable" class="text-xs text-amber-600 dark:text-amber-400" data-testid="image-bridge-unavailable-reason">
+      {{ selectedUnavailable.model }}: {{ reasonLabel(selectedUnavailable.reason) }}
+    </p>
   </div>
 </template>
 
@@ -31,12 +34,14 @@ const props = defineProps<{ modelValue: string | null }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string | null] }>()
 const { t } = useI18n()
 const models = ref<string[]>([])
+const defaultModel = ref('')
+const availability = ref<Array<{ model: string; available: boolean; reason?: string }>>([])
 const loading = ref(false)
 const failed = ref(false)
 const options = computed<SelectOption[]>(() => {
   const result: SelectOption[] = [
     { value: '', label: t('keys.imageBridgeDisabled') },
-    { value: null, label: t('keys.imageBridgeDefault') },
+    { value: null, label: defaultModel.value ? `${t('keys.imageBridgeDefault')} · ${defaultModel.value}` : t('keys.imageBridgeDefault') },
     ...models.value.map(model => ({ value: model, label: model }))
   ]
   if (props.modelValue && !models.value.includes(props.modelValue)) {
@@ -44,6 +49,23 @@ const options = computed<SelectOption[]>(() => {
   }
   return result
 })
+const selectedUnavailable = computed(() => {
+  const selected = props.modelValue === null ? defaultModel.value : props.modelValue
+  if (!selected) return null
+  return availability.value.find(item => item.model === selected && !item.available) || null
+})
+
+function reasonLabel(reason?: string) {
+  const keys: Record<string, string> = {
+    no_provider: 'keys.imageBridgeReasonNoProvider',
+    account_inactive: 'keys.imageBridgeReasonAccountInactive',
+    account_unschedulable: 'keys.imageBridgeReasonAccountUnschedulable',
+    wrong_account_purpose: 'keys.imageBridgeReasonWrongPurpose',
+    not_in_group_allowlist: 'keys.imageBridgeReasonNotAllowed',
+    temporarily_unavailable: 'keys.imageBridgeReasonTemporary'
+  }
+  return t(keys[reason || ''] || 'keys.imageBridgeUnavailable')
+}
 
 async function loadModels() {
   loading.value = true
@@ -51,6 +73,8 @@ async function loadModels() {
   try {
     const result = await keysAPI.getImageBridgeModels()
     models.value = result.models
+    defaultModel.value = result.default_model || ''
+    availability.value = result.availability || []
   } catch {
     failed.value = true
   } finally {

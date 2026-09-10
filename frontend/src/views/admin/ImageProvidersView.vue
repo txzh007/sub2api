@@ -307,14 +307,14 @@ async function load() {
   loading.value = true
   try {
     const groups = await adminAPI.groups.getAllIncludingInactive()
-    group.value = groups.find(item => item.name === '生图') || null
+    group.value = groups.find(item => item.system_role === 'image_generation') || null
     if (!group.value) {
       accounts.value = []
       total.value = 0
       return
     }
     const result = await adminAPI.accounts.list(page.value, 100, { group: String(group.value.id), type: 'apikey', lite: 'false' })
-    accounts.value = result.items.filter(item => item.platform === 'openai' || item.platform === 'gemini' || item.platform === 'grok')
+    accounts.value = result.items.filter(item => item.purpose === 'image_provider')
     total.value = result.total
   } catch (error) {
     app.showError(message(error))
@@ -346,7 +346,7 @@ async function loadCopyCandidates() {
       if (!result.items.length) break
     } while (candidates.length < sourceTotal)
     copyCandidates.value = candidates.filter(account =>
-      account.platform === 'openai' || account.platform === 'gemini' || account.platform === 'grok'
+      account.purpose !== 'image_provider' && (account.platform === 'openai' || account.platform === 'gemini' || account.platform === 'grok')
     )
     copySourceID.value = copyCandidates.value[0]?.id || null
   } catch (error) {
@@ -433,10 +433,6 @@ async function save() {
     }
     mapping[name] = target
   }
-  if (!Object.keys(mapping).length) {
-    formError.value = t('imageProviders.selectModelRequired')
-    return
-  }
   saving.value = true
   formError.value = ''
   try {
@@ -445,7 +441,7 @@ async function save() {
     if (editing.value) {
       await adminAPI.accounts.update(editing.value.id, { name: form.value.name.trim(), credentials, concurrency: form.value.concurrency })
     } else {
-      await adminAPI.accounts.create({ name: form.value.name.trim(), platform: form.value.platform, type: 'apikey', credentials,
+      await adminAPI.accounts.create({ name: form.value.name.trim(), platform: form.value.platform, type: 'apikey', purpose: 'image_provider', credentials,
         group_ids: [group.value.id], concurrency: form.value.concurrency, priority: 1 })
     }
     showForm.value = false

@@ -2,7 +2,7 @@
 
 TToken is an independently versioned distribution based on Sub2API.
 
-- TToken version: `0.2.0`
+- TToken version: `0.3.0`
 - Upstream baseline: `Sub2API 0.2.4` (`98d86915becae9fe9491a91ffc6defd5235c8d2b`)
 - Product-facing name: `TToken`
 - Upstream-compatible Go module and internal paths are intentionally retained
@@ -52,6 +52,19 @@ Nginx, and keep the old application container available for a short observation
 window. Avoid administrator configuration writes while both application
 versions are running. Database migrations are forward-only, so a complete
 rollback requires the pre-upgrade PostgreSQL and `/app/data` backups.
+
+## TToken 0.3.0
+
+- Makes image-provider accounts a first-class account purpose backed by a
+  stable image-generation group role rather than a mutable display name.
+- Lets administrators create providers or copy supported existing API-key
+  accounts while retaining only still-image model mappings.
+- Uses one API-key bridge selection policy on Images and Responses: an empty
+  value disables the bridge, a concrete model pins it, and null inherits the
+  server default.
+- Reports why configured image models are unavailable and keeps Grok video
+  models outside the still-image bridge.
+- Allows image providers to save an empty model selection safely.
 
 ## TToken 0.2.0
 

@@ -65,7 +65,7 @@ func setupImageProviderCopyRouter(t *testing.T, svc service.AdminService) *gin.E
 func TestCopyToImageProviderCopiesServerSideAndRebindsOnlyImageGroup(t *testing.T) {
 	svc := &imageProviderCopyAdminService{
 		source: &service.Account{ID: 42, Platform: service.PlatformGrok, Type: service.AccountTypeAPIKey},
-		group:  &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
+		group:  &service.Group{ID: 24, Name: "生图", SystemRole: service.GroupSystemRoleImageGeneration, Status: service.StatusActive, AllowImageGeneration: true},
 		duplicate: &service.Account{
 			ID: 43, Name: "Grok (Copy)", Platform: service.PlatformGrok, Type: service.AccountTypeAPIKey,
 			Status: service.StatusActive, Schedulable: false, Credentials: map[string]any{
@@ -109,7 +109,7 @@ func TestCopyToImageProviderCopiesServerSideAndRebindsOnlyImageGroup(t *testing.
 func TestCopyToImageProviderUsesOnlyDefaultOpenAIImageModels(t *testing.T) {
 	svc := &imageProviderCopyAdminService{
 		source:    &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
-		group:     &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
+		group:     &service.Group{ID: 24, Name: "生图", SystemRole: service.GroupSystemRoleImageGeneration, Status: service.StatusActive, AllowImageGeneration: true},
 		duplicate: &service.Account{ID: 43, Name: "OpenAI (Copy)", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "secret"}},
 	}
 	router := setupImageProviderCopyRouter(t, svc)
@@ -125,14 +125,16 @@ func TestCopyToImageProviderUsesOnlyDefaultOpenAIImageModels(t *testing.T) {
 	require.Contains(t, mapping, "gpt-image-2")
 	require.NotContains(t, mapping, "gpt-5.6-sol")
 	for model, target := range mapping {
-		require.True(t, service.IsImageProviderModel(model) || service.IsImageProviderModel(target.(string)))
+		targetModel, ok := target.(string)
+		require.True(t, ok)
+		require.True(t, service.IsImageProviderModel(model) || service.IsImageProviderModel(targetModel))
 	}
 }
 
 func TestCopyToImageProviderRejectsUnsupportedSource(t *testing.T) {
 	svc := &imageProviderCopyAdminService{
 		source: &service.Account{ID: 42, Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey},
-		group:  &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
+		group:  &service.Group{ID: 24, Name: "生图", SystemRole: service.GroupSystemRoleImageGeneration, Status: service.StatusActive, AllowImageGeneration: true},
 	}
 	router := setupImageProviderCopyRouter(t, svc)
 	recorder := httptest.NewRecorder()
@@ -149,7 +151,7 @@ func TestCopyToImageProviderRejectsUnsupportedSource(t *testing.T) {
 func TestCopyToImageProviderReplaysSameOperation(t *testing.T) {
 	svc := &imageProviderCopyAdminService{
 		source:    &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
-		group:     &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
+		group:     &service.Group{ID: 24, Name: "生图", SystemRole: service.GroupSystemRoleImageGeneration, Status: service.StatusActive, AllowImageGeneration: true},
 		duplicate: &service.Account{ID: 43, Name: "Images (Copy)", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
 	}
 	router := setupImageProviderCopyRouter(t, svc)

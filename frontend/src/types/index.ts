@@ -618,6 +618,7 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+	system_role: '' | 'image_generation'
   force_openai_fast: boolean
   free_openai_fast: boolean
   model_pricing: import('@/api/admin/channels').ChannelModelPricing[]
@@ -1159,6 +1160,7 @@ export interface Account {
   notes?: string | null
   platform: AccountPlatform
   type: AccountType
+  purpose: 'general' | 'image_provider'
   // 后端响应里 credentials 已脱敏：access_token / refresh_token / id_token /
   // api_key / session_key / cookie / aws_secret_access_key / aws_session_token /
   // service_account_json / service_account / private_key 不会出现，
@@ -1473,6 +1475,7 @@ export interface CreateAccountRequest {
   notes?: string | null
   platform: AccountPlatform
   type: AccountType
+  purpose?: 'general' | 'image_provider'
   credentials: Record<string, unknown>
   extra?: Record<string, unknown>
   proxy_id?: number | null
@@ -1491,6 +1494,7 @@ export interface UpdateAccountRequest {
   name?: string
   notes?: string | null
   type?: AccountType
+  purpose?: 'general' | 'image_provider'
   credentials?: Record<string, unknown>
   extra?: Record<string, unknown>
   proxy_id?: number | null

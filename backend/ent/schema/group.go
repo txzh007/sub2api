@@ -68,6 +68,10 @@ func (Group) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.String("system_role").
+			MaxLen(32).
+			Default("").
+			Comment("Internal stable role for system-managed groups; empty means a normal group"),
 		field.String("duplicate_operation_id").
 			MaxLen(64).
 			Optional().

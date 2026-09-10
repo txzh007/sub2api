@@ -303,6 +303,7 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 		Notes:                 cloneAccountValuePointer(source.Notes),
 		Platform:              source.Platform,
 		Type:                  source.Type,
+		Purpose:               source.Purpose,
 		Credentials:           credentials,
 		Extra:                 extra,
 		ProxyID:               cloneAccountValuePointer(proxyID),
@@ -421,6 +422,7 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		Notes:       normalizeAccountNotes(input.Notes),
 		Platform:    input.Platform,
 		Type:        input.Type,
+		Purpose:     NormalizeAccountPurpose(input.Purpose),
 		Credentials: input.Credentials,
 		Extra:       accountExtra,
 		ProxyID:     input.ProxyID,
@@ -522,6 +524,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		return nil, err
 	}
 	if err := s.ValidateAccountGroupBindings(ctx, groupIDs); err != nil {
+		return nil, err
+	}
+	if err := s.validateAccountPurpose(ctx, account, groupIDs); err != nil {
 		return nil, err
 	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
@@ -626,6 +631,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	if input.Type != "" {
 		account.Type = input.Type
+	}
+	if input.Purpose != nil {
+		account.Purpose = NormalizeAccountPurpose(*input.Purpose)
 	}
 	if input.Notes != nil {
 		account.Notes = normalizeAccountNotes(input.Notes)
@@ -827,6 +835,13 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			}
 		}
 	}
+	effectiveGroupIDs := account.GroupIDs
+	if input.GroupIDs != nil {
+		effectiveGroupIDs = *input.GroupIDs
+	}
+	if err := s.validateAccountPurpose(ctx, account, effectiveGroupIDs); err != nil {
+		return nil, err
+	}
 
 	billingSettingsAppliedAtomically := false
 	updater := s.accountBillingRepo
@@ -888,6 +903,39 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	return updated, nil
+}
+
+func (s *adminServiceImpl) validateAccountPurpose(ctx context.Context, account *Account, groupIDs []int64) error {
+	if account == nil {
+		return ErrAccountNilInput
+	}
+	purpose := NormalizeAccountPurpose(account.Purpose)
+	if purpose != AccountPurposeImageProvider {
+		return nil
+	}
+	imageGroups := 0
+	for _, groupID := range groupIDs {
+		group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+		if err != nil {
+			return fmt.Errorf("get group: %w", err)
+		}
+		if group.IsImageGenerationGroup() {
+			imageGroups++
+		}
+	}
+
+	if account.Type != AccountTypeAPIKey {
+		return infraerrors.BadRequest("IMAGE_PROVIDER_TYPE_INVALID", "image providers must use API key credentials")
+	}
+	switch account.Platform {
+	case PlatformOpenAI, PlatformGemini, PlatformGrok:
+	default:
+		return infraerrors.BadRequest("IMAGE_PROVIDER_PLATFORM_INVALID", "image providers must use OpenAI, Gemini, or Grok accounts")
+	}
+	if len(groupIDs) != 1 || imageGroups != 1 {
+		return infraerrors.BadRequest("IMAGE_PROVIDER_GROUP_INVALID", "image providers must belong only to the image generation group")
+	}
+	return ValidateImageProviderModelMapping(account.GetModelMapping())
 }
 
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键

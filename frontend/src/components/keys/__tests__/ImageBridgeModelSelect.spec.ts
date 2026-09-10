@@ -12,7 +12,7 @@ describe('image bridge model selection', () => {
   beforeEach(() => { getModels.mockReset() })
 
   it('loads model options from the server image group and emits the chosen model', async () => {
-    getModels.mockResolvedValue({ group_id: 24, group_name: '生图', models: ['gemini-custom-image'] })
+    getModels.mockResolvedValue({ group_id: 24, group_name: '生图', models: ['gemini-custom-image'], availability: [{ model: 'gemini-custom-image', available: true }] })
     const wrapper = render()
     await flushPromises()
     const select = wrapper.findComponent(SelectStub)
@@ -23,17 +23,18 @@ describe('image bridge model selection', () => {
   })
 
   it('preserves an existing selection when its model becomes unavailable', async () => {
-    getModels.mockResolvedValue({ group_name: '生图', models: [] })
+    getModels.mockResolvedValue({ group_name: '生图', models: [], availability: [{ model: 'gemini-retired-image', available: false, reason: 'no_provider' }] })
     const wrapper = render('gemini-retired-image')
     await flushPromises()
     const option = wrapper.findComponent(SelectStub).props('options').find((entry: { value: unknown }) => entry.value === 'gemini-retired-image')
     expect(option.disabled).toBe(true)
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     expect(wrapper.text()).toContain('keys.imageBridgeEmpty')
+    expect(wrapper.get('[data-testid="image-bridge-unavailable-reason"]').text()).toContain('keys.imageBridgeReasonNoProvider')
   })
 
   it('shows a retry after a failed fetch and updates the available models', async () => {
-    getModels.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ group_name: '生图', models: ['gemini-3-pro-image'] })
+    getModels.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ group_name: '生图', models: ['gemini-3-pro-image'], availability: [] })
     const wrapper = render(null)
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(true)

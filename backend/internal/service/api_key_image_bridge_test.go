@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,10 +59,15 @@ func (r *imageBridgeAccountRepoStub) ListSchedulableByGroupID(_ context.Context,
 	return r.accounts, nil
 }
 
+func (r *imageBridgeAccountRepoStub) ListByGroup(_ context.Context, id int64) ([]Account, error) {
+	r.groupID = id
+	return r.accounts, nil
+}
+
 func imageBridgeServiceFixture() (*APIKeyService, *Group, *User, *imageBridgeAccountRepoStub) {
-	group := &Group{ID: 24, Name: ImageBridgeGroupName, Platform: PlatformComposite, Status: StatusActive, AllowImageGeneration: true, Hydrated: true}
+	group := &Group{ID: 24, Name: ImageBridgeGroupName, SystemRole: GroupSystemRoleImageGeneration, Platform: PlatformComposite, Status: StatusActive, AllowImageGeneration: true, Hydrated: true}
 	user := &User{ID: 1, Status: StatusActive, Balance: 100}
-	accounts := &imageBridgeAccountRepoStub{accounts: []Account{{Platform: PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"gemini-3.1-flash-image": "gemini-3.1-flash-image", "gemini-3-pro-image": "gemini-3-pro-image", "gpt-5.5": "gpt-5.5", "*": "gemini-3-pro-image"}}}}}
+	accounts := &imageBridgeAccountRepoStub{accounts: []Account{{ID: 9, Platform: PlatformGemini, Purpose: AccountPurposeImageProvider, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"gemini-3.1-flash-image": "gemini-3.1-flash-image", "gemini-3-pro-image": "gemini-3-pro-image", "gpt-5.5": "gpt-5.5", "*": "gemini-3-pro-image"}}}}}
 	svc := &APIKeyService{groupRepo: &imageBridgeGroupRepoStub{group: group}, userRepo: &imageBridgeUserRepoStub{user: user}, userSubRepo: &imageBridgeSubRepoStub{}, imageBridgeAccounts: accounts}
 	return svc, group, user, accounts
 }
@@ -76,8 +82,12 @@ func TestAPIKeyImageBridgeModelsUseImageGroupAndCurrentPermissions(t *testing.T)
 	for _, mutate := range []func(){
 		func() { group.Status = "inactive" },
 		func() { group.Status = StatusActive; group.AllowImageGeneration = false },
-		func() { group.AllowImageGeneration = true; group.Name = "普通分组" },
-		func() { group.Name = ImageBridgeGroupName; group.IsExclusive = true },
+		func() {
+			group.AllowImageGeneration = true
+			group.Name = "改名后的生图池"
+			group.SystemRole = GroupSystemRoleNone
+		},
+		func() { group.SystemRole = GroupSystemRoleImageGeneration; group.IsExclusive = true },
 	} {
 		mutate()
 		models, err = svc.GetImageBridgeModels(ctx, user.ID)
@@ -91,6 +101,47 @@ func TestAPIKeyImageBridgeModelsUseImageGroupAndCurrentPermissions(t *testing.T)
 	require.NoError(t, err)
 	_, _, err = svc.ResolveImageBridge(ctx, user.ID, "gemini-not-in-group-image")
 	require.Error(t, err)
+}
+
+func TestAPIKeyImageBridgeGroupRenameDoesNotBreakLookup(t *testing.T) {
+	svc, group, user, _ := imageBridgeServiceFixture()
+	group.Name = "Images Pool"
+	models, err := svc.GetImageBridgeModels(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Images Pool", models.GroupName)
+	require.Equal(t, []string{"gemini-3-pro-image", "gemini-3.1-flash-image"}, models.Models)
+}
+
+func TestAPIKeyImageBridgeEffectiveModelUsesSharedTriStateSemantics(t *testing.T) {
+	svc := &APIKeyService{cfg: &config.Config{Gateway: config.GatewayConfig{CodexGeminiImageModel: " gemini-3.1-flash-image "}}}
+
+	model, enabled := svc.EffectiveImageBridgeModel(&APIKey{})
+	require.Equal(t, "gemini-3.1-flash-image", model)
+	require.True(t, enabled)
+
+	disabled := ""
+	model, enabled = svc.EffectiveImageBridgeModel(&APIKey{ImageBridgeModel: &disabled})
+	require.Empty(t, model)
+	require.False(t, enabled)
+
+	pinned := " grok-imagine-image-2.0 "
+	model, enabled = svc.EffectiveImageBridgeModel(&APIKey{ImageBridgeModel: &pinned})
+	require.Equal(t, "grok-imagine-image-2.0", model)
+	require.True(t, enabled)
+}
+
+func TestAPIKeyImageBridgeAvailabilityExplainsPausedProvider(t *testing.T) {
+	svc, group, user, accounts := imageBridgeServiceFixture()
+	group.ModelAllowlist = GroupModelAllowlist{Enabled: true, Models: []string{"gemini-3.1-flash-image", "grok-imagine-image-2.0"}}
+	accounts.accounts[0].Schedulable = false
+	models, err := svc.GetImageBridgeModels(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Empty(t, models.Models)
+	require.Equal(t, []ImageBridgeModelAvailability{
+		{Model: "gemini-3-pro-image", Reason: ImageBridgeUnavailableNotAllowed},
+		{Model: "gemini-3.1-flash-image", Reason: ImageBridgeUnavailableAccountUnschedulable},
+		{Model: "grok-imagine-image-2.0", Reason: ImageBridgeUnavailableNoProvider},
+	}, models.Availability)
 }
 
 func TestAPIKeyImageBridgeRebindPreservesMainKeyAndQuota(t *testing.T) {

@@ -149,6 +149,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 	}
 	out := &AdminGroup{
 		Group:                       groupFromServiceBase(g),
+		SystemRole:                  g.SystemRole,
 		ForceOpenAIFast:             g.ForceOpenAIFast,
 		FreeOpenAIFast:              g.FreeOpenAIFast,
 		ProfitControlEnabled:        g.ProfitControlEnabled,
@@ -248,6 +249,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		Notes:                   a.Notes,
 		Platform:                a.Platform,
 		Type:                    a.Type,
+		Purpose:                 service.NormalizeAccountPurpose(a.Purpose),
 		Credentials:             redactedCreds,
 		CredentialsStatus:       credsStatus,
 		Extra:                   extra,
@@ -458,6 +460,7 @@ func AccountListItemFromAccount(a *Account) *AccountListItem {
 	}
 	return &AccountListItem{
 		ID: a.ID, Name: a.Name, Notes: a.Notes, Platform: a.Platform, Type: a.Type,
+		Purpose:     a.Purpose,
 		Credentials: a.Credentials, CredentialsStatus: a.CredentialsStatus, Extra: a.Extra,
 		OllamaCloudUsage: a.OllamaCloudUsage,
 		ProxyID:          a.ProxyID, ProxyFallbackOriginID: a.ProxyFallbackOriginID, ProxyFallbackOriginName: a.ProxyFallbackOriginName,
