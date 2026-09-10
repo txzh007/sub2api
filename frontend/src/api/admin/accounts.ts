@@ -643,7 +643,7 @@ export interface SyncUpstreamPreviewParams {
 
 export interface ImageModelsPreviewParams {
   account_id?: number
-  platform: 'openai' | 'gemini'
+  platform: 'openai' | 'gemini' | 'grok'
   base_url: string
   api_key?: string
 }

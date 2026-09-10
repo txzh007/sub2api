@@ -33,6 +33,7 @@ func TestPreviewImageModelsUsesDraftSettingsWithoutSaving(t *testing.T) {
 	}{
 		{"create OpenAI", `{"platform":"openai","base_url":"https://images.example/v1","api_key":"new-key"}`, "https://images.example/v1/models", "Authorization", "Bearer new-key", `{"data":[{"id":"gpt-image-2"},{"id":"gemini-3.1-flash-image"}]}`},
 		{"create Gemini", `{"platform":"gemini","base_url":"https://images.example/v1beta","api_key":"gemini-key"}`, "https://images.example/v1beta/models", "x-goog-api-key", "gemini-key", `{"models":[{"name":"models/gemini-3.1-flash-image"}]}`},
+		{"create Grok", `{"platform":"grok","base_url":"https://api.x.ai/v1","api_key":"xai-key"}`, "https://api.x.ai/v1/models", "Authorization", "Bearer xai-key", `{"data":[{"id":"grok-imagine-image-2.0"}]}`},
 		{"edit with saved key and changed URL", `{"account_id":44,"platform":"openai","base_url":"https://changed.example/v1"}`, "https://changed.example/v1/models", "Authorization", "Bearer saved-key", `{"data":[{"id":"gpt-image-2"}]}`},
 		{"edit with replacement key", `{"account_id":44,"platform":"openai","base_url":"https://changed.example/v1","api_key":"replacement-key"}`, "https://changed.example/v1/models", "Authorization", "Bearer replacement-key", `{"data":[{"id":"gpt-image-2"}]}`},
 	} {

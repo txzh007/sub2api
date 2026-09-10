@@ -31,6 +31,11 @@ describe('independent image providers', () => {
     await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === 'imageProviders.create')!.trigger('click')
     expect(wrapper.findComponent(SelectStub).props('modelValue')).toBe('openai')
+    expect(wrapper.findComponent(SelectStub).props('options')).toEqual([
+      { value: 'openai', label: 'OpenAI' },
+      { value: 'gemini', label: 'Gemini' },
+      { value: 'grok', label: 'Grok / xAI' }
+    ])
     await wrapper.get('#image-provider-name').setValue('Images')
     await wrapper.get('#image-provider-url').setValue('https://images.example/v1')
     await wrapper.get('#image-provider-key').setValue('test-secret')
@@ -46,6 +51,13 @@ describe('independent image providers', () => {
         'gemini-3.1-flash-image': 'gemini-3.1-flash-image', 'gpt-image-2': 'gpt-image-2'
       } }
     }))
+  })
+
+  it('keeps Grok image accounts visible in the provider list', async () => {
+    api.list.mockResolvedValue({ items: [{ id: 101, name: 'Grok Images', platform: 'grok', status: 'active', schedulable: true }], total: 1 })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.text()).toContain('common.edit')
   })
 
   it('preserves existing credentials and settings when editing without a new key', async () => {

@@ -16,7 +16,7 @@ import (
 func (h *AccountHandler) PreviewImageModels(c *gin.Context) {
 	var req struct {
 		AccountID int64  `json:"account_id" binding:"omitempty,gt=0"`
-		Platform  string `json:"platform" binding:"required,oneof=openai gemini"`
+		Platform  string `json:"platform" binding:"required,oneof=openai gemini grok"`
 		BaseURL   string `json:"base_url" binding:"required"`
 		APIKey    string `json:"api_key"`
 	}
@@ -32,7 +32,7 @@ func (h *AccountHandler) PreviewImageModels(c *gin.Context) {
 			return
 		}
 		if saved.Type != service.AccountTypeAPIKey || saved.Platform != req.Platform {
-			response.BadRequest(c, "Image provider must use the saved account's API key protocol")
+			response.BadRequest(c, "Image provider must use the saved account type")
 			return
 		}
 		copy := *saved

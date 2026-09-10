@@ -16,7 +16,7 @@
       </template>
       <template #table>
         <DataTable :columns="columns" :data="accounts" :loading="loading">
-          <template #cell-platform="{ row }">{{ row.platform === 'gemini' ? 'Gemini' : 'OpenAI' }}</template>
+          <template #cell-platform="{ row }">{{ accountTypeLabel(row.platform) }}</template>
           <template #cell-base_url="{ row }">
             <span class="block max-w-80 truncate" :title="String(row.credentials?.base_url || '')">{{ row.credentials?.base_url || '—' }}</span>
           </template>
@@ -48,9 +48,9 @@
           <input id="image-provider-name" v-model="form.name" class="input" required maxlength="100" />
         </div>
         <div>
-          <label class="input-label">{{ t('imageProviders.protocol') }}</label>
-          <Select v-model="form.platform" :disabled="!!editing" :options="protocolOptions" />
-          <p class="input-hint">{{ t('imageProviders.protocolHint') }}</p>
+          <label class="input-label">{{ t('imageProviders.accountType') }}</label>
+          <Select v-model="form.platform" :disabled="!!editing" :options="accountTypeOptions" />
+          <p class="input-hint">{{ t('imageProviders.accountTypeHint') }}</p>
         </div>
         <div>
           <label for="image-provider-url" class="input-label">Base URL</label>
@@ -159,7 +159,9 @@ const editing = ref<Account | null>(null)
 const deleteTarget = ref<AccountListItem | null>(null)
 const deleteError = ref('')
 const formError = ref('')
-const emptyForm = () => ({ name: '', platform: 'openai' as 'openai' | 'gemini', baseURL: '', apiKey: '', models: '', concurrency: 3 })
+type ImageAccountPlatform = 'openai' | 'gemini' | 'grok'
+
+const emptyForm = () => ({ name: '', platform: 'openai' as ImageAccountPlatform, baseURL: '', apiKey: '', models: '', concurrency: 3 })
 const form = ref(emptyForm())
 const fetchingModels = ref(false)
 const remoteModels = ref<string[] | null>(null)
@@ -225,15 +227,23 @@ async function fetchModels() {
     if (request === modelsRequest) fetchingModels.value = false
   }
 }
-const protocolOptions = [{ value: 'openai', label: 'OpenAI' }, { value: 'gemini', label: 'Gemini' }]
+const accountTypeOptions = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'grok', label: 'Grok / xAI' }
+]
 const columns = computed(() => [
   { key: 'name', label: t('common.name') },
-  { key: 'platform', label: t('imageProviders.protocol') },
+  { key: 'platform', label: t('imageProviders.accountType') },
   { key: 'base_url', label: 'Base URL' },
   { key: 'models', label: t('imageProviders.models') },
   { key: 'status', label: t('common.status') },
   { key: 'actions', label: t('common.actions') }
 ])
+
+function accountTypeLabel(platform: string) {
+  return accountTypeOptions.find(option => option.value === platform)?.label || platform
+}
 
 function modelNames(account: AccountListItem) {
   return Object.keys((account.credentials?.model_mapping || {}) as Record<string, string>)
@@ -256,7 +266,7 @@ async function load() {
       return
     }
     const result = await adminAPI.accounts.list(page.value, 100, { group: String(group.value.id), type: 'apikey', lite: 'false' })
-    accounts.value = result.items.filter(item => item.platform === 'openai' || item.platform === 'gemini')
+    accounts.value = result.items.filter(item => item.platform === 'openai' || item.platform === 'gemini' || item.platform === 'grok')
     total.value = result.total
   } catch (error) {
     app.showError(message(error))
@@ -281,7 +291,7 @@ async function openEdit(id: number) {
     const mapping = (account.credentials?.model_mapping || {}) as Record<string, string>
     form.value = {
       name: account.name,
-      platform: account.platform as 'openai' | 'gemini',
+      platform: account.platform as ImageAccountPlatform,
       baseURL: String(account.credentials?.base_url || ''),
       apiKey: '',
       models: Object.entries(mapping).map(([model, target]) => model === target ? model : `${model}=${target}`).join('\n'),
