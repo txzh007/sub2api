@@ -8,7 +8,7 @@ vi.mock('@/api/client', () => ({
   apiClient: { post }
 }))
 
-import { duplicate } from '@/api/admin/accounts'
+import { copyToImageProvider, duplicate } from '@/api/admin/accounts'
 
 describe('admin account duplicate API', () => {
   beforeEach(() => {
@@ -55,5 +55,28 @@ describe('admin account duplicate API', () => {
     expect(post).toHaveBeenCalledTimes(2)
     expect(post.mock.calls[1][2].headers).toEqual(firstHeaders)
     expect(sessionStorage.length).toBe(0)
+  })
+
+  it('copies an account to an image group with an operation-specific idempotency key', async () => {
+    const account = await copyToImageProvider(42, 24)
+
+    expect(post).toHaveBeenCalledWith('/admin/accounts/42/copy-to-image-provider', { group_id: 24 }, {
+      headers: {
+        'Idempotency-Key': 'image-provider-copy-42-24-11111111-1111-4111-8111-111111111111'
+      }
+    })
+    expect(account).toEqual({ id: 43, name: 'primary (Copy)' })
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('reuses the image-provider copy key after an ambiguous failure', async () => {
+    post.mockRejectedValueOnce(new Error('network timeout'))
+    await expect(copyToImageProvider(51, 24)).rejects.toThrow('network timeout')
+
+    post.mockResolvedValueOnce({ data: { id: 52, name: 'retry (Copy)' } })
+    await copyToImageProvider(51, 24)
+
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[1][2].headers).toEqual(post.mock.calls[0][2].headers)
   })
 })

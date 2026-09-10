@@ -6,6 +6,7 @@
           <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.hint') }}</p>
           <div class="flex gap-2">
             <button class="btn btn-secondary" :disabled="loading" @click="load">{{ t('common.refresh') }}</button>
+            <button class="btn btn-secondary" :disabled="loading || !group" @click="openCopy">{{ t('imageProviders.copyExisting') }}</button>
             <button class="btn btn-primary" :disabled="loading || !group" @click="openCreate">{{ t('imageProviders.create') }}</button>
           </div>
         </div>
@@ -120,6 +121,31 @@
         <button class="btn btn-primary" type="submit" form="image-provider-form" :disabled="saving">{{ saving ? t('common.saving') : t('common.save') }}</button>
       </template>
     </BaseDialog>
+    <BaseDialog :show="showCopy" :title="t('imageProviders.copyExisting')" width="normal" @close="closeCopy">
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-dark-300">{{ t('imageProviders.copyHint') }}</p>
+        <p v-if="copyLoading" role="status" class="py-3 text-center text-sm text-gray-500 dark:text-dark-400">{{ t('common.loading') }}</p>
+        <template v-else>
+          <div v-if="copyAccountOptions.length">
+            <label class="input-label">{{ t('imageProviders.sourceAccount') }}</label>
+            <Select
+              v-model="copySourceID"
+              :options="copyAccountOptions"
+              :placeholder="t('imageProviders.selectSourceAccount')"
+              searchable
+            />
+          </div>
+          <p v-else class="rounded-lg bg-gray-50 p-3 text-sm text-gray-500 dark:bg-dark-700 dark:text-dark-300">{{ t('imageProviders.noCopyCandidates') }}</p>
+        </template>
+        <p v-if="copyError" role="alert" class="text-sm text-red-600">{{ copyError }}</p>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" :disabled="copying" @click="closeCopy">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="copyLoading || copying || !copySourceID" @click="confirmCopy">
+          {{ copying ? t('imageProviders.copying') : t('imageProviders.copyConfirm') }}
+        </button>
+      </template>
+    </BaseDialog>
     <BaseDialog :show="!!deleteTarget" :title="t('imageProviders.deleteTitle')" width="narrow" @close="cancelDelete">
       <p class="text-sm text-gray-600 dark:text-dark-300">{{ t('imageProviders.deleteConfirm', { name: deleteTarget?.name }) }}</p>
       <p class="mt-3 text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.deleteImpact') }}</p>
@@ -159,6 +185,12 @@ const editing = ref<Account | null>(null)
 const deleteTarget = ref<AccountListItem | null>(null)
 const deleteError = ref('')
 const formError = ref('')
+const showCopy = ref(false)
+const copyLoading = ref(false)
+const copying = ref(false)
+const copyCandidates = ref<AccountListItem[]>([])
+const copySourceID = ref<number | null>(null)
+const copyError = ref('')
 type ImageAccountPlatform = 'openai' | 'gemini' | 'grok'
 
 const emptyForm = () => ({ name: '', platform: 'openai' as ImageAccountPlatform, baseURL: '', apiKey: '', models: '', concurrency: 3 })
@@ -232,6 +264,11 @@ const accountTypeOptions = [
   { value: 'gemini', label: 'Gemini' },
   { value: 'grok', label: 'Grok / xAI' }
 ]
+const copyAccountOptions = computed(() => copyCandidates.value.map(account => ({
+  value: account.id,
+  label: `${account.name} · ${accountTypeLabel(account.platform)}`,
+  description: String(account.credentials?.base_url || '')
+})))
 const columns = computed(() => [
   { key: 'name', label: t('common.name') },
   { key: 'platform', label: t('imageProviders.accountType') },
@@ -281,6 +318,63 @@ function openCreate() {
   formError.value = ''
   showAdvancedModels.value = false
   showForm.value = true
+}
+
+async function loadCopyCandidates() {
+  copyLoading.value = true
+  copyError.value = ''
+  try {
+    const candidates: AccountListItem[] = []
+    let sourcePage = 1
+    let sourceTotal = 0
+    do {
+      const result = await adminAPI.accounts.list(sourcePage, 100, { type: 'apikey', lite: 'false' })
+      candidates.push(...result.items)
+      sourceTotal = result.total
+      sourcePage++
+      if (!result.items.length) break
+    } while (candidates.length < sourceTotal)
+    copyCandidates.value = candidates.filter(account =>
+      account.platform === 'openai' || account.platform === 'gemini' || account.platform === 'grok'
+    )
+    copySourceID.value = copyCandidates.value[0]?.id || null
+  } catch (error) {
+    copyCandidates.value = []
+    copySourceID.value = null
+    copyError.value = message(error)
+  } finally {
+    copyLoading.value = false
+  }
+}
+
+function openCopy() {
+  copyCandidates.value = []
+  copySourceID.value = null
+  copyError.value = ''
+  showCopy.value = true
+  void loadCopyCandidates()
+}
+
+function closeCopy() {
+  if (copying.value) return
+  showCopy.value = false
+  copyError.value = ''
+}
+
+async function confirmCopy() {
+  if (!group.value || !copySourceID.value || copying.value) return
+  copying.value = true
+  copyError.value = ''
+  try {
+    const copied = await adminAPI.accounts.copyToImageProvider(copySourceID.value, group.value.id)
+    showCopy.value = false
+    app.showSuccess(t('imageProviders.copySuccess', { name: copied.name }))
+    await load()
+  } catch (error) {
+    copyError.value = message(error)
+  } finally {
+    copying.value = false
+  }
 }
 
 async function openEdit(id: number) {

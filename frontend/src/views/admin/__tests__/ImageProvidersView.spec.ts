@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ImageProvidersView from '../ImageProvidersView.vue'
 
-const api = vi.hoisted(() => ({ groups: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), setSchedulable: vi.fn(), preview: vi.fn(), success: vi.fn(), error: vi.fn() }))
-vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: api.groups }, accounts: { list: api.list, getById: api.get, create: api.create, update: api.update, delete: api.remove, setSchedulable: api.setSchedulable, previewImageModels: api.preview } } }))
+const api = vi.hoisted(() => ({ groups: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), copy: vi.fn(), update: vi.fn(), remove: vi.fn(), setSchedulable: vi.fn(), preview: vi.fn(), success: vi.fn(), error: vi.fn() }))
+vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: api.groups }, accounts: { list: api.list, getById: api.get, create: api.create, copyToImageProvider: api.copy, update: api.update, delete: api.remove, setSchedulable: api.setSchedulable, previewImageModels: api.preview } } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: api.success, showError: api.error }) }))
 vi.mock('vue-i18n', async importOriginal => ({ ...await importOriginal<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 const SelectStub = { name: 'Select', props: ['modelValue', 'options', 'disabled'], template: '<div />' }
@@ -21,6 +21,7 @@ describe('independent image providers', () => {
     api.groups.mockResolvedValue([{ id: 24, name: '生图', status: 'active', allow_image_generation: true }])
     api.list.mockResolvedValue({ items: [], total: 0 })
     api.create.mockResolvedValue({ id: 100 })
+    api.copy.mockResolvedValue({ id: 102, name: 'Source (Copy)' })
     api.update.mockResolvedValue({ id: 100 })
     api.remove.mockReset().mockResolvedValue({ message: 'Account deleted successfully' })
     api.preview.mockReset().mockResolvedValue({ models: ['gpt-image-2', 'gemini-3.1-flash-image', 'gpt-5.5', 'custom-model'] })
@@ -58,6 +59,31 @@ describe('independent image providers', () => {
     const wrapper = render()
     await flushPromises()
     expect(wrapper.text()).toContain('common.edit')
+  })
+
+  it('copies a supported existing API-key account into the image group', async () => {
+    api.list.mockImplementation((_page, _pageSize, filters) => {
+      if (filters?.group) return Promise.resolve({ items: [], total: 0 })
+      return Promise.resolve({ items: [
+        { id: 51, name: 'Claude OAuth', platform: 'anthropic', type: 'oauth' },
+        { id: 52, name: 'Grok Source', platform: 'grok', type: 'apikey', credentials: { base_url: 'https://api.x.ai/v1' } },
+        { id: 53, name: 'Gemini Source', platform: 'gemini', type: 'apikey' }
+      ], total: 3 })
+    })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.copyExisting')!.trigger('click')
+    await flushPromises()
+    const sourceSelect = wrapper.findComponent(SelectStub)
+    expect(sourceSelect.props('options')).toEqual([
+      { value: 52, label: 'Grok Source · Grok / xAI', description: 'https://api.x.ai/v1' },
+      { value: 53, label: 'Gemini Source · Gemini', description: '' }
+    ])
+    expect(sourceSelect.props('modelValue')).toBe(52)
+    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.copyConfirm')!.trigger('click')
+    await flushPromises()
+    expect(api.copy).toHaveBeenCalledWith(52, 24)
+    expect(api.success).toHaveBeenCalledWith('imageProviders.copySuccess')
   })
 
   it('preserves existing credentials and settings when editing without a new key', async () => {

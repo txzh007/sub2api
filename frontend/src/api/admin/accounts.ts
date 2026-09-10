@@ -229,6 +229,44 @@ export async function duplicate(id: number): Promise<Account> {
   return data
 }
 
+const imageProviderCopyOperationKeys = new Map<string, string>()
+
+function imageProviderCopyStorageKey(id: number, groupID: number): string {
+  return `sub2api:admin:image-provider-copy:${id}:${groupID}`
+}
+
+/** Copy an existing API-key account into the dedicated image provider group. */
+export async function copyToImageProvider(id: number, groupID: number): Promise<Account> {
+  const operationScope = `${id}:${groupID}`
+  const storageKey = imageProviderCopyStorageKey(id, groupID)
+  let idempotencyKey = imageProviderCopyOperationKeys.get(operationScope)
+  try {
+    idempotencyKey ||= globalThis.sessionStorage?.getItem(storageKey) ?? undefined
+  } catch {
+    // In-memory retry protection remains available when browser storage is unavailable.
+  }
+  if (!idempotencyKey) {
+    const requestID = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    idempotencyKey = `image-provider-copy-${id}-${groupID}-${requestID}`
+  }
+  imageProviderCopyOperationKeys.set(operationScope, idempotencyKey)
+  try {
+    globalThis.sessionStorage?.setItem(storageKey, idempotencyKey)
+  } catch {
+    // In-memory retry protection remains available when browser storage is unavailable.
+  }
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/copy-to-image-provider`, { group_id: groupID }, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  })
+  imageProviderCopyOperationKeys.delete(operationScope)
+  try {
+    globalThis.sessionStorage?.removeItem(storageKey)
+  } catch {
+    // Ignore storage cleanup failures after the server has confirmed success.
+  }
+  return data
+}
+
 /**
  * Update account
  * @param id - Account ID
@@ -1086,6 +1124,7 @@ export const accountsAPI = {
   getById,
   create,
   duplicate,
+  copyToImageProvider,
   update,
   getGrokMediaEligibility,
   updateGrokMediaEligibility,
