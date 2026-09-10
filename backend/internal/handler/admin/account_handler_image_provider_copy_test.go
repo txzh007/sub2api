@@ -21,6 +21,7 @@ type imageProviderCopyAdminService struct {
 	duplicateKey       string
 	updatedAccountID   int64
 	updatedGroupIDs    []int64
+	updatedCredentials map[string]any
 	skipMixedRiskCheck bool
 }
 
@@ -41,9 +42,11 @@ func (s *imageProviderCopyAdminService) DuplicateAccount(_ context.Context, _ in
 func (s *imageProviderCopyAdminService) UpdateAccount(_ context.Context, id int64, input *service.UpdateAccountInput) (*service.Account, error) {
 	s.updatedAccountID = id
 	s.updatedGroupIDs = append([]int64(nil), (*input.GroupIDs)...)
+	s.updatedCredentials = input.Credentials
 	s.skipMixedRiskCheck = input.SkipMixedChannelCheck
 	updated := *s.duplicate
 	updated.GroupIDs = append([]int64(nil), s.updatedGroupIDs...)
+	updated.Credentials = input.Credentials
 	return &updated, nil
 }
 
@@ -65,7 +68,17 @@ func TestCopyToImageProviderCopiesServerSideAndRebindsOnlyImageGroup(t *testing.
 		group:  &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
 		duplicate: &service.Account{
 			ID: 43, Name: "Grok (Copy)", Platform: service.PlatformGrok, Type: service.AccountTypeAPIKey,
-			Status: service.StatusActive, Schedulable: false, Credentials: map[string]any{"api_key": "secret"},
+			Status: service.StatusActive, Schedulable: false, Credentials: map[string]any{
+				"api_key": "secret",
+				"model_mapping": map[string]any{
+					"grok-4.6":                    "grok-4.6",
+					"grok-imagine":                "grok-imagine-image-quality",
+					"draw-alias":                  "grok-imagine-image-2.0",
+					"grok-imagine-video-1.5":      "grok-imagine-video-1.5",
+					"xai/grok-imagine-image":      "grok-imagine-image",
+					"x-ai/grok-imagine-video-1.5": "grok-imagine-video-1.5",
+				},
+			},
 		},
 	}
 	router := setupImageProviderCopyRouter(t, svc)
@@ -82,8 +95,38 @@ func TestCopyToImageProviderCopiesServerSideAndRebindsOnlyImageGroup(t *testing.
 	require.Equal(t, int64(43), svc.updatedAccountID)
 	require.Equal(t, []int64{24}, svc.updatedGroupIDs)
 	require.True(t, svc.skipMixedRiskCheck)
+	require.Equal(t, map[string]any{
+		"grok-imagine":           "grok-imagine-image-quality",
+		"draw-alias":             "grok-imagine-image-2.0",
+		"xai/grok-imagine-image": "grok-imagine-image",
+	}, svc.updatedCredentials["model_mapping"])
 	require.Contains(t, recorder.Body.String(), `"name":"Grok (Copy)"`)
+	require.NotContains(t, recorder.Body.String(), "grok-4.6")
+	require.NotContains(t, recorder.Body.String(), "grok-imagine-video")
 	require.NotContains(t, recorder.Body.String(), "secret")
+}
+
+func TestCopyToImageProviderUsesOnlyDefaultOpenAIImageModels(t *testing.T) {
+	svc := &imageProviderCopyAdminService{
+		source:    &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
+		group:     &service.Group{ID: 24, Name: "生图", Status: service.StatusActive, AllowImageGeneration: true},
+		duplicate: &service.Account{ID: 43, Name: "OpenAI (Copy)", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "secret"}},
+	}
+	router := setupImageProviderCopyRouter(t, svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/42/copy-to-image-provider", strings.NewReader(`{"group_id":24}`))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	mapping, ok := svc.updatedCredentials["model_mapping"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, mapping, "gpt-image-2")
+	require.NotContains(t, mapping, "gpt-5.6-sol")
+	for model, target := range mapping {
+		require.True(t, service.IsImageProviderModel(model) || service.IsImageProviderModel(target.(string)))
+	}
 }
 
 func TestCopyToImageProviderRejectsUnsupportedSource(t *testing.T) {

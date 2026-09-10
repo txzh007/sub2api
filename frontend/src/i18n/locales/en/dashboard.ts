@@ -6,7 +6,7 @@ export default {
     create: 'Add image provider',
     edit: 'Edit image provider',
     copyExisting: 'Copy existing account',
-    copyHint: 'Copies the credential, proxy, concurrency, and model mapping. The copy belongs only to the image group and starts disabled.',
+    copyHint: 'Copies credentials, proxy, and concurrency while keeping only still-image model mappings. Text and video models are omitted. The copy belongs only to the image group and starts disabled.',
     sourceAccount: 'Source account',
     selectSourceAccount: 'Select a source account',
     noCopyCandidates: 'No OpenAI, Gemini, or Grok API key accounts are available to copy.',

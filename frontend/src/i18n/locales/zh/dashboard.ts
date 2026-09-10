@@ -6,7 +6,7 @@ export default {
     create: '添加生图接口',
     edit: '编辑生图接口',
     copyExisting: '从现有账号复制',
-    copyHint: '复制账号的密钥、代理、并发和模型映射，副本只绑定“生图”分组并默认停用。',
+    copyHint: '复制账号的密钥、代理和并发，模型映射只保留图片模型（不复制文本及视频模型）。副本只绑定“生图”分组并默认停用。',
     sourceAccount: '来源账号',
     selectSourceAccount: '请选择来源账号',
     noCopyCandidates: '暂无可复制的 OpenAI、Gemini 或 Grok API Key 账号。',

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -99,8 +100,20 @@ func (h *AccountHandler) bindCopiedImageProvider(ctx context.Context, copied *se
 	if copied == nil {
 		return nil, fmt.Errorf("copied image provider account is missing")
 	}
+	credentials := maps.Clone(copied.Credentials)
+	if credentials == nil {
+		credentials = make(map[string]any)
+	}
+	imageMapping := service.ImageProviderModelMapping(copied)
+	serializedMapping := make(map[string]any, len(imageMapping))
+	for requestedModel, upstreamModel := range imageMapping {
+		serializedMapping[requestedModel] = upstreamModel
+	}
+	credentials["model_mapping"] = serializedMapping
+
 	groupIDs := []int64{groupID}
 	updated, err := h.adminService.UpdateAccount(ctx, copied.ID, &service.UpdateAccountInput{
+		Credentials:           credentials,
 		GroupIDs:              &groupIDs,
 		SkipMixedChannelCheck: true,
 	})
