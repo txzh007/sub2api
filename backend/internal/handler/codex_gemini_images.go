@@ -58,8 +58,26 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		tool, hasTool := findGeminiBridgeImageTool(request)
 		requestModel, _ := request["model"].(string)
 		directImage := service.IsImageProviderModel(requestModel)
-		codex := strings.Contains(strings.ToLower(c.GetHeader("User-Agent")), "codex") || strings.Contains(strings.ToLower(c.GetHeader("originator")), "codex")
-		if model == "" || (!hasTool && !codex && !directImage) {
+		// A configured bridge must not turn every Codex Responses request into a
+		// buffered hosted-tool workflow. Only intercept requests that explicitly
+		// expose an image tool, or that directly target an image model. Ordinary
+		// text requests keep their original streaming path through next. Historical
+		// bridge images still need conversion to ordinary vision input, but that
+		// lightweight rewrite must preserve the client's stream setting.
+		if model == "" {
+			next(c)
+			return
+		}
+		if !hasTool && !directImage {
+			if normalizeGeminiImageHistory(request) {
+				normalizedBody, marshalErr := json.Marshal(request)
+				if marshalErr != nil {
+					h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to normalize image bridge history")
+					return
+				}
+				c.Request.Body = io.NopCloser(bytes.NewReader(normalizedBody))
+				c.Request.ContentLength = int64(len(normalizedBody))
+			}
 			next(c)
 			return
 		}
@@ -194,11 +212,12 @@ func prepareGeminiImageFunctionRequest(request map[string]any, referenceCount in
 
 // Generated images belong to this gateway, so an OpenAI account cannot look
 // up their IDs. Full-history clients send the image bytes back as vision input.
-func normalizeGeminiImageHistory(request map[string]any) {
+func normalizeGeminiImageHistory(request map[string]any) bool {
 	items, ok := request["input"].([]any)
 	if !ok {
-		return
+		return false
 	}
+	changed := false
 	for i, raw := range items {
 		item, _ := raw.(map[string]any)
 		id, _ := item["id"].(string)
@@ -215,8 +234,10 @@ func normalizeGeminiImageHistory(request map[string]any) {
 				map[string]any{"type": "input_text", "text": "Image generated earlier in this conversation:"},
 				map[string]any{"type": "input_image", "image_url": "data:image/" + format + ";base64," + data},
 			}}
+			changed = true
 		}
 	}
+	return changed
 }
 
 func imageToolChoiceForced(request map[string]any) bool {

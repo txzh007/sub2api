@@ -211,17 +211,28 @@ func TestGeminiImagesCodexForcedToolAndReferences(t *testing.T) {
 }
 
 func TestGeminiImagesCodexOrdinaryRequestsRemainUnchanged(t *testing.T) {
-	key := &service.APIKey{Group: &service.Group{ID: 42, Platform: service.PlatformComposite, AllowImageGeneration: true}}
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		t.Fatal("ordinary Codex text must not contact the image upstream")
+		return nil, nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
 	body := `{"model":"gpt-5.4","input":"fix this bug","stream":true}`
 	c, w := geminiImagesTestContext(key, "/responses", body)
 	c.Request.Header.Set("User-Agent", "codex_cli_rs")
-	h := &GatewayHandler{}
+	nextCalled := false
 	h.WrapGeminiImageResponses(func(c *gin.Context) {
+		nextCalled = true
 		b, _ := io.ReadAll(c.Request.Body)
 		require.Equal(t, body, string(b))
-		c.JSON(200, gin.H{"unchanged": true})
+		c.Header("Content-Type", "text/event-stream")
+		c.Status(http.StatusOK)
+		_, _ = c.Writer.WriteString("event: response.output_text.delta\ndata: {\"delta\":\"live\"}\n\n")
 	}, nil)(c)
+	require.True(t, nextCalled)
 	require.Equal(t, 200, w.Code)
+	require.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+	require.Contains(t, w.Body.String(), `"delta":"live"`)
+	require.NotContains(t, w.Body.String(), "image bridge working")
 }
 
 func TestGeminiImagesCaptureLimitAndStreamingErrors(t *testing.T) {
@@ -246,21 +257,23 @@ func TestGeminiImagesCodexHistoryAndTextToolEvents(t *testing.T) {
 	h.cfg.Gateway.CodexGeminiImageModel = service.DefaultGeminiImageModel
 	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":[{"id":"ig_sub2api_previous","type":"image_generation_call","result":"aW1hZ2U="},{"role":"user","content":"save this file"}],"stream":true}`)
 	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	upstreamSSE := "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"path\\\":\\\"image.png\\\"}\"}\n\n" +
+		"event: response.custom_tool_call_input.delta\ndata: {\"type\":\"response.custom_tool_call_input.delta\",\"input\":\"*** Begin Patch\\n*** End Patch\"}\n\n"
 	h.WrapGeminiImageResponses(func(child *gin.Context) {
 		body, _ := io.ReadAll(child.Request.Body)
 		require.Equal(t, "data:image/png;base64,aW1hZ2U=", gjson.GetBytes(body, "input.0.content.1.image_url").String())
-		require.False(t, gjson.GetBytes(body, "parallel_tool_calls").Bool())
+		require.True(t, gjson.GetBytes(body, "stream").Bool())
+		require.False(t, gjson.GetBytes(body, "parallel_tool_calls").Exists())
 		require.NotContains(t, string(body), "ig_sub2api_previous")
-		child.JSON(200, gin.H{"id": "resp_text", "status": "completed", "output": []any{
-			gin.H{"id": "fc_file", "type": "function_call", "name": "write_file", "call_id": "call_file", "arguments": `{"path":"image.png"}`},
-			gin.H{"id": "ct_patch", "type": "custom_tool_call", "name": "apply_patch", "call_id": "call_patch", "input": "*** Begin Patch\n*** End Patch"},
-		}})
+		child.Header("Content-Type", "text/event-stream")
+		child.Status(http.StatusOK)
+		_, _ = child.Writer.WriteString(upstreamSSE)
 	}, service.NewCompositeRouteResolver(nil))(c)
 	require.Equal(t, 200, w.Code, w.Body.String())
+	require.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 	require.Contains(t, w.Body.String(), "response.function_call_arguments.delta")
-	require.Contains(t, w.Body.String(), `"name":"write_file"`)
 	require.Contains(t, w.Body.String(), "response.custom_tool_call_input.delta")
-	require.Contains(t, w.Body.String(), `"input":"*** Begin Patch\n*** End Patch"`)
+	require.Equal(t, upstreamSSE, w.Body.String())
 }
 
 func TestGeminiImagesCodexFollowupFailureKeepsImage(t *testing.T) {
