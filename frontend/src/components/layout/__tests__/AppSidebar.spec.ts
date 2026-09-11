@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest'
 
 const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppSidebar.vue')
 const componentSource = readFileSync(componentPath, 'utf8')
+const versionBadgeSource = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../common/VersionBadge.vue'),
+  'utf8'
+)
 const stylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../style.css')
 const styleSource = readFileSync(stylePath, 'utf8')
 
@@ -52,10 +56,9 @@ describe('AppSidebar collapsible groups', () => {
 })
 
 describe('AppSidebar header styles', () => {
-  it('shows only the branded build version without the upstream update badge', () => {
-    expect(componentSource).toContain('v{{ siteVersion }}')
-    expect(componentSource).not.toContain('<VersionBadge')
-    expect(componentSource).not.toContain("import VersionBadge")
+  it('uses the TToken version badge without clipping its dropdown', () => {
+    expect(componentSource).toContain('<VersionBadge :version="siteVersion" />')
+    expect(componentSource).toContain("import VersionBadge")
 
     const sidebarHeaderBlockMatch = styleSource.match(/\.sidebar-header\s*\{[\s\S]*?\n {2}\}/)
     const sidebarBrandBlockMatch = componentSource.match(/\.sidebar-brand\s*\{[\s\S]*?\n\}/)
@@ -64,5 +67,12 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch).not.toBeNull()
     expect(sidebarHeaderBlockMatch?.[0]).not.toContain('@apply overflow-hidden;')
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
+  })
+
+  it('checks only the independent TToken release channel', () => {
+    expect(versionBadgeSource).toContain("const GITHUB_REPO = 'txzh007/sub2api'")
+    expect(versionBadgeSource).toContain("const RELEASE_TAG_PREFIX = 'ttoken-v'")
+    expect(versionBadgeSource).toContain("const DOCKER_IMAGE = 'ghcr.io/txzh007/ttoken'")
+    expect(versionBadgeSource).not.toContain("const GITHUB_REPO = 'Wei-Shaw/sub2api'")
   })
 })

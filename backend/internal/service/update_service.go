@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -25,12 +26,16 @@ import (
 var (
 	ErrNoUpdateAvailable         = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
 	ErrRollbackVersionNotAllowed = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
+	ErrInPlaceUpdateUnsupported  = infraerrors.Conflict("IN_PLACE_UPDATE_UNSUPPORTED", "in-place update is unavailable for container builds; install the TToken release binary or update the container image from the host")
+	stableReleaseVersionPattern  = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
 const (
-	updateCacheKey = "update_check_cache"
-	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	updateCacheKey             = "update_check_cache"
+	updateCacheTTL             = 1200 // 20 minutes
+	defaultUpdateRepository    = "Wei-Shaw/sub2api"
+	defaultUpdateTagPrefix     = "v"
+	latestReleaseFetchPageSize = 100
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -42,7 +47,7 @@ const (
 	// Rollback: expose at most the 3 most recent versions older than current
 	maxRollbackVersions = 3
 	// Fetch a few extra releases so filtering (current/newer/prerelease) still leaves enough candidates
-	rollbackFetchPageSize = 15
+	rollbackFetchPageSize = 100
 )
 
 // UpdateCache defines cache operations for update service
@@ -65,6 +70,8 @@ type UpdateService struct {
 	githubClient   GitHubReleaseClient
 	currentVersion string
 	buildType      string // "source" for manual builds, "release" for CI builds
+	repository     string
+	tagPrefix      string
 }
 
 // NewUpdateService creates a new UpdateService
@@ -74,6 +81,19 @@ func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, versi
 		githubClient:   githubClient,
 		currentVersion: version,
 		buildType:      buildType,
+		repository:     defaultUpdateRepository,
+		tagPrefix:      defaultUpdateTagPrefix,
+	}
+}
+
+// ConfigureReleaseChannel selects an independent release feed. Empty values
+// retain the upstream-compatible defaults used by unit tests and source builds.
+func (s *UpdateService) ConfigureReleaseChannel(repository, tagPrefix string) {
+	if repository = strings.TrimSpace(repository); repository != "" {
+		s.repository = repository
+	}
+	if tagPrefix = strings.TrimSpace(tagPrefix); tagPrefix != "" {
+		s.tagPrefix = tagPrefix
 	}
 }
 
@@ -85,7 +105,7 @@ type UpdateInfo struct {
 	ReleaseInfo    *ReleaseInfo `json:"release_info,omitempty"`
 	Cached         bool         `json:"cached"`
 	Warning        string       `json:"warning,omitempty"`
-	BuildType      string       `json:"build_type"` // "source" or "release"
+	BuildType      string       `json:"build_type"` // "source", "release", or "container"
 }
 
 // ReleaseInfo contains GitHub release details
@@ -163,6 +183,9 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
+	if s.buildType == "container" {
+		return ErrInPlaceUpdateUnsupported
+	}
 	info, err := s.CheckUpdate(ctx, true)
 	if err != nil {
 		return err
@@ -171,7 +194,6 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 	if !info.HasUpdate {
 		return ErrNoUpdateAvailable
 	}
-
 	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
 }
 
@@ -195,6 +217,9 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []
 
 	if downloadURL == "" {
 		return fmt.Errorf("no compatible release found for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	if s.tagPrefix != defaultUpdateTagPrefix && checksumURL == "" {
+		return fmt.Errorf("checksums.txt is required for the %s release channel", s.tagPrefix)
 	}
 
 	// SECURITY: Validate download URL is from trusted domain
@@ -281,6 +306,9 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []
 
 // Rollback restores the previous version
 func (s *UpdateService) Rollback() error {
+	if s.buildType == "container" {
+		return ErrInPlaceUpdateUnsupported
+	}
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
@@ -314,8 +342,12 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 
 	versions := make([]RollbackVersion, 0, len(releases))
 	for _, r := range releases {
+		version, ok := s.releaseVersion(r.TagName)
+		if !ok {
+			continue
+		}
 		versions = append(versions, RollbackVersion{
-			Version:     strings.TrimPrefix(r.TagName, "v"),
+			Version:     version,
 			PublishedAt: r.PublishedAt,
 			HTMLURL:     r.HTMLURL,
 		})
@@ -327,7 +359,10 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 // The target must be one of the versions returned by ListRollbackVersions;
 // anything else (including the current version) is rejected.
 func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
-	target := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if s.buildType == "container" {
+		return ErrInPlaceUpdateUnsupported
+	}
+	target := s.requestedVersion(version)
 	if target == "" {
 		return ErrRollbackVersionNotAllowed
 	}
@@ -339,7 +374,8 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 
 	var match *GitHubRelease
 	for _, r := range releases {
-		if strings.TrimPrefix(r.TagName, "v") == target {
+		candidate, ok := s.releaseVersion(r.TagName)
+		if ok && candidate == target {
 			match = r
 			break
 		}
@@ -347,7 +383,6 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 	if match == nil {
 		return ErrRollbackVersionNotAllowed
 	}
-
 	assets := make([]Asset, len(match.Assets))
 	for i, a := range match.Assets {
 		assets[i] = Asset{
@@ -363,7 +398,7 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 // fetchRollbackCandidates fetches recent releases and keeps the newest
 // maxRollbackVersions entries strictly older than the current version.
 func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubRelease, error) {
-	releases, err := s.githubClient.FetchRecentReleases(ctx, githubRepo, rollbackFetchPageSize)
+	releases, err := s.githubClient.FetchRecentReleases(ctx, s.repository, rollbackFetchPageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -374,8 +409,11 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 		if r == nil || r.Draft || r.Prerelease {
 			continue
 		}
-		v := strings.TrimPrefix(r.TagName, "v")
-		if v == "" || seen[v] {
+		v, ok := s.releaseVersion(r.TagName)
+		if !ok || seen[v] {
+			continue
+		}
+		if s.tagPrefix != defaultUpdateTagPrefix && !s.hasCompatibleReleaseAssets(r) {
 			continue
 		}
 		// Only versions strictly older than current (also excludes current itself)
@@ -387,9 +425,11 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
+		left, _ := s.releaseVersion(candidates[i].TagName)
+		right, _ := s.releaseVersion(candidates[j].TagName)
 		return compareVersions(
-			strings.TrimPrefix(candidates[i].TagName, "v"),
-			strings.TrimPrefix(candidates[j].TagName, "v"),
+			left,
+			right,
 		) > 0
 	})
 
@@ -399,13 +439,34 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 	return candidates, nil
 }
 
+func (s *UpdateService) hasCompatibleReleaseAssets(release *GitHubRelease) bool {
+	if release == nil {
+		return false
+	}
+	archiveName := s.getArchiveName()
+	hasArchive := false
+	hasChecksum := false
+	for _, asset := range release.Assets {
+		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
+			hasArchive = true
+		}
+		if asset.Name == "checksums.txt" {
+			hasChecksum = true
+		}
+	}
+	return hasArchive && hasChecksum
+}
+
 func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
-	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
+	release, err := s.fetchLatestChannelRelease(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	latestVersion, ok := s.releaseVersion(release.TagName)
+	if !ok {
+		return nil, fmt.Errorf("release %q does not belong to update channel %q", release.TagName, s.tagPrefix)
+	}
 
 	assets := make([]Asset, len(release.Assets))
 	for i, a := range release.Assets {
@@ -430,6 +491,66 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 		Cached:    false,
 		BuildType: s.buildType,
 	}, nil
+}
+
+func (s *UpdateService) fetchLatestChannelRelease(ctx context.Context) (*GitHubRelease, error) {
+	// The upstream channel uses GitHub's latest endpoint. Independent channels
+	// such as ttoken-v* must scan recent releases so an unrelated v* release in
+	// the same fork can never be selected accidentally.
+	if s.tagPrefix == defaultUpdateTagPrefix {
+		release, err := s.githubClient.FetchLatestRelease(ctx, s.repository)
+		if err == nil && release != nil {
+			if _, ok := s.releaseVersion(release.TagName); ok {
+				return release, nil
+			}
+		}
+	}
+	releases, err := s.githubClient.FetchRecentReleases(ctx, s.repository, latestReleaseFetchPageSize)
+	if err != nil {
+		return nil, err
+	}
+	var latest *GitHubRelease
+	latestVersion := ""
+	for _, release := range releases {
+		if release == nil || release.Draft || release.Prerelease {
+			continue
+		}
+		version, ok := s.releaseVersion(release.TagName)
+		if !ok {
+			continue
+		}
+		if s.buildType == "release" && s.tagPrefix != defaultUpdateTagPrefix && !s.hasCompatibleReleaseAssets(release) {
+			continue
+		}
+		if latest == nil || compareVersions(version, latestVersion) > 0 {
+			latest = release
+			latestVersion = version
+		}
+	}
+	if latest == nil {
+		return nil, fmt.Errorf("no stable %s* release found in %s", s.tagPrefix, s.repository)
+	}
+	return latest, nil
+}
+
+func (s *UpdateService) releaseVersion(tag string) (string, bool) {
+	tag = strings.TrimSpace(tag)
+	if !strings.HasPrefix(tag, s.tagPrefix) {
+		return "", false
+	}
+	version := strings.TrimSpace(strings.TrimPrefix(tag, s.tagPrefix))
+	if !stableReleaseVersionPattern.MatchString(version) {
+		return "", false
+	}
+	return version, true
+}
+
+func (s *UpdateService) requestedVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if strings.HasPrefix(version, s.tagPrefix) {
+		return strings.TrimSpace(strings.TrimPrefix(version, s.tagPrefix))
+	}
+	return strings.TrimPrefix(version, "v")
 }
 
 func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest string) error {
@@ -603,6 +724,8 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 		Latest      string       `json:"latest"`
 		ReleaseInfo *ReleaseInfo `json:"release_info"`
 		Timestamp   int64        `json:"timestamp"`
+		Repository  string       `json:"repository"`
+		TagPrefix   string       `json:"tag_prefix"`
 	}
 	if err := json.Unmarshal([]byte(data), &cached); err != nil {
 		return nil, err
@@ -610,6 +733,15 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 
 	if time.Now().Unix()-cached.Timestamp > updateCacheTTL {
 		return nil, fmt.Errorf("cache expired")
+	}
+	// Never reuse an upstream Sub2API cache entry after switching to the
+	// independent TToken release channel (or vice versa).
+	if cached.Repository != "" || cached.TagPrefix != "" {
+		if cached.Repository != s.repository || cached.TagPrefix != s.tagPrefix {
+			return nil, fmt.Errorf("cache belongs to another release channel")
+		}
+	} else if s.repository != defaultUpdateRepository || s.tagPrefix != defaultUpdateTagPrefix {
+		return nil, fmt.Errorf("legacy cache belongs to the upstream release channel")
 	}
 
 	return &UpdateInfo{
@@ -627,10 +759,14 @@ func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {
 		Latest      string       `json:"latest"`
 		ReleaseInfo *ReleaseInfo `json:"release_info"`
 		Timestamp   int64        `json:"timestamp"`
+		Repository  string       `json:"repository"`
+		TagPrefix   string       `json:"tag_prefix"`
 	}{
 		Latest:      info.LatestVersion,
 		ReleaseInfo: info.ReleaseInfo,
 		Timestamp:   time.Now().Unix(),
+		Repository:  s.repository,
+		TagPrefix:   s.tagPrefix,
 	}
 
 	data, _ := json.Marshal(cacheData)

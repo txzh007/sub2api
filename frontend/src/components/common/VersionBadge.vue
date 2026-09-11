@@ -231,7 +231,7 @@
                 </button>
               </div>
 
-              <!-- Priority 3: Update available for source build - show git pull hint -->
+              <!-- Priority 3: Non-updatable source/container build -->
               <div v-else-if="hasUpdate && !isReleaseBuild" class="space-y-2">
                 <a
                   v-if="releaseInfo?.html_url && releaseInfo.html_url !== '#'"
@@ -286,7 +286,11 @@
                     />
                   </svg>
                   <p class="text-xs text-blue-600 dark:text-blue-400">
-                    {{ t('version.sourceModeHint') }}
+                    {{
+                      isContainerBuild
+                        ? t('version.containerModeHint')
+                        : t('version.sourceModeHint')
+                    }}
                   </p>
                 </div>
               </div>
@@ -395,7 +399,7 @@
 
                   <transition name="rollback">
                     <div v-if="rollbackPanelOpen" class="mt-2 space-y-2">
-                      <!-- Source build: online rollback unavailable, use git instead -->
+                      <!-- Source/container build: in-place rollback is unavailable -->
                       <div
                         v-if="!isReleaseBuild"
                         class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800/50 dark:bg-blue-900/20"
@@ -414,7 +418,11 @@
                           />
                         </svg>
                         <p class="min-w-0 flex-1 text-xs leading-4 text-blue-600 dark:text-blue-400">
-                          {{ t('version.rollbackSourceHint') }}
+                          {{
+                            isContainerBuild
+                              ? t('version.rollbackContainerHint')
+                              : t('version.rollbackSourceHint')
+                          }}
                         </p>
                       </div>
 
@@ -651,9 +659,9 @@ import {
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
 
-const GITHUB_REPO = 'Wei-Shaw/sub2api'
-// Docker Hub image published by CI (tags carry no "v" prefix, e.g. weishaw/sub2api:0.1.146)
-const DOCKER_IMAGE = 'weishaw/sub2api'
+const GITHUB_REPO = 'txzh007/sub2api'
+const RELEASE_TAG_PREFIX = 'ttoken-v'
+const DOCKER_IMAGE = 'ghcr.io/txzh007/ttoken'
 
 const { t } = useI18n()
 
@@ -709,8 +717,8 @@ const manualTabs = computed(() => [
 
 const scriptRollbackCommand = computed(() => {
   if (!selectedRollbackVersion.value) return ''
-  const tag = `v${selectedRollbackVersion.value}`
-  return `curl -sSL https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/deploy/install.sh | sudo bash -s -- rollback ${tag}`
+  const tag = `${RELEASE_TAG_PREFIX}${selectedRollbackVersion.value}`
+  return `curl -sSL https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/deploy/install-ttoken.sh | sudo bash -s -- rollback ${tag}`
 })
 
 const dockerRollbackCommand = computed(() => {
@@ -728,8 +736,10 @@ const activeManualCommand = computed(() =>
   manualTab.value === 'docker' ? dockerRollbackCommand.value : scriptRollbackCommand.value
 )
 
-// Only show update check for release builds (binary/docker deployment)
+// Only a standalone release binary can replace itself durably. Container image
+// layers are immutable and must be replaced from the host.
 const isReleaseBuild = computed(() => buildType.value === 'release')
+const isContainerBuild = computed(() => buildType.value === 'container')
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value

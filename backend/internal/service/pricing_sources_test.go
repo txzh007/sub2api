@@ -187,3 +187,47 @@ func TestManagedPricingBaselinePrecedesLocalOverride(t *testing.T) {
 	require.InDelta(t, 0.000001, pricing["test-model"].InputCostPerToken, 1e-15)
 	require.InDelta(t, 0.000009, pricing["test-model"].OutputCostPerToken, 1e-15)
 }
+
+func TestStandaloneBinaryUsesEmbeddedManagedPricingBaseline(t *testing.T) {
+	svc := &PricingService{cfg: &config.Config{Pricing: config.PricingConfig{
+		ManagedOverrideFile: filepath.Join("resources", "model-pricing", "ttoken_model_pricing_overrides.json"),
+		OverrideFile:        filepath.Join(t.TempDir(), "missing-local-overrides.json"),
+	}}}
+
+	workingDir := t.TempDir()
+	previousDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(workingDir))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(previousDir)) })
+
+	entries := svc.loadPricingOverrideEntries()
+	require.Len(t, entries, 162)
+	require.Contains(t, entries, "deepseek-v4-pro")
+	require.Contains(t, entries, "grok-imagine-video")
+}
+
+func TestStandaloneBinaryUsesEmbeddedFallbackCatalog(t *testing.T) {
+	svc := &PricingService{cfg: &config.Config{Pricing: config.PricingConfig{
+		DataDir:      t.TempDir(),
+		FallbackFile: filepath.Join("resources", "model-pricing", "model_prices_and_context_window.json"),
+	}}}
+
+	workingDir := t.TempDir()
+	previousDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(workingDir))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(previousDir)) })
+
+	require.NoError(t, svc.useFallbackPricing())
+	require.NotEmpty(t, svc.pricingData)
+	require.Contains(t, svc.pricingData, "gpt-4o")
+}
+
+func TestExplicitMissingPricingPathDoesNotUseEmbeddedBaseline(t *testing.T) {
+	_, err := readPricingResourceFile(
+		filepath.Join(t.TempDir(), "custom", "ttoken_model_pricing_overrides.json"),
+		"ttoken_model_pricing_overrides.json",
+		func() []byte { return []byte(`{"unexpected":true}`) },
+	)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}

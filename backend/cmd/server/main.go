@@ -41,7 +41,7 @@ var (
 	UpstreamVersion = ""
 	Commit          = "unknown"
 	Date            = "unknown"
-	BuildType       = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
+	BuildType       = "source" // "source", "release" (updatable binary), or "container" (set by ldflags)
 )
 
 func init() {

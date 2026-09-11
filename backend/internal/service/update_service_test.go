@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
@@ -31,13 +32,17 @@ type updateServiceGitHubClientStub struct {
 	release        *GitHubRelease
 	recentReleases []*GitHubRelease
 	recentErr      error
+	latestRepos    []string
+	recentRepos    []string
 }
 
-func (s *updateServiceGitHubClientStub) FetchLatestRelease(context.Context, string) (*GitHubRelease, error) {
+func (s *updateServiceGitHubClientStub) FetchLatestRelease(_ context.Context, repo string) (*GitHubRelease, error) {
+	s.latestRepos = append(s.latestRepos, repo)
 	return s.release, nil
 }
 
-func (s *updateServiceGitHubClientStub) FetchRecentReleases(context.Context, string, int) ([]*GitHubRelease, error) {
+func (s *updateServiceGitHubClientStub) FetchRecentReleases(_ context.Context, repo string, _ int) ([]*GitHubRelease, error) {
+	s.recentRepos = append(s.recentRepos, repo)
 	return s.recentReleases, s.recentErr
 }
 
@@ -67,6 +72,44 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+}
+
+func TestUpdateServiceTTokenChannelIgnoresUpstreamReleases(t *testing.T) {
+	assets := []GitHubAsset{
+		{Name: "ttoken_0.4.0_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"},
+		{Name: "checksums.txt"},
+	}
+	github := &updateServiceGitHubClientStub{recentReleases: []*GitHubRelease{
+		{TagName: "v9.9.9", Name: "upstream"},
+		{TagName: "ttoken-v99.0.0-malformed", Name: "malformed stable tag"},
+		{TagName: "ttoken-v0.3.0", Name: "TToken 0.3.0"},
+		{TagName: "ttoken-v0.4.0", Name: "TToken 0.4.0", Assets: assets},
+		{TagName: "ttoken-v0.5.0-rc1", Name: "prerelease", Prerelease: true},
+	}}
+	svc := NewUpdateService(&updateServiceCacheStub{}, github, "0.3.0", "release")
+	svc.ConfigureReleaseChannel("txzh007/sub2api", "ttoken-v")
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	require.Equal(t, "0.4.0", info.LatestVersion)
+	require.Equal(t, "TToken 0.4.0", info.ReleaseInfo.Name)
+	require.Empty(t, github.latestRepos)
+	require.Equal(t, []string{"txzh007/sub2api"}, github.recentRepos)
+}
+
+func TestUpdateServiceContainerBuildRefusesInPlaceReplacement(t *testing.T) {
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{},
+		"0.3.0",
+		"container",
+	)
+
+	require.ErrorIs(t, svc.PerformUpdate(context.Background()), ErrInPlaceUpdateUnsupported)
+	require.ErrorIs(t, svc.Rollback(), ErrInPlaceUpdateUnsupported)
+	require.ErrorIs(t, svc.RollbackToVersion(context.Background(), "0.2.0"), ErrInPlaceUpdateUnsupported)
 }
 
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {

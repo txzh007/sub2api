@@ -22,6 +22,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	pricingresources "github.com/Wei-Shaw/sub2api/resources"
 	"go.uber.org/zap"
 )
 
@@ -889,10 +890,17 @@ func (s *PricingService) loadPricingOverrideEntries() map[string]json.RawMessage
 	}
 	merged := make(map[string]json.RawMessage)
 	layers := []struct {
-		name string
-		path string
+		name             string
+		path             string
+		defaultFileName  string
+		embeddedFallback func() []byte
 	}{
-		{name: "managed override", path: s.cfg.Pricing.ManagedOverrideFile},
+		{
+			name:             "managed override",
+			path:             s.cfg.Pricing.ManagedOverrideFile,
+			defaultFileName:  "ttoken_model_pricing_overrides.json",
+			embeddedFallback: pricingresources.ManagedPricingOverrides,
+		},
 		{name: "local override", path: s.cfg.Pricing.OverrideFile},
 	}
 	for _, layer := range layers {
@@ -900,7 +908,7 @@ func (s *PricingService) loadPricingOverrideEntries() map[string]json.RawMessage
 		if path == "" {
 			continue
 		}
-		body, err := os.ReadFile(path)
+		body, err := readPricingResourceFile(path, layer.defaultFileName, layer.embeddedFallback)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -1055,7 +1063,11 @@ func (s *PricingService) mergeFallbackPricingData(data map[string]*LiteLLMModelP
 	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.Pricing.FallbackFile) == "" {
 		return data
 	}
-	fallbackBody, err := os.ReadFile(s.cfg.Pricing.FallbackFile)
+	fallbackBody, err := readPricingResourceFile(
+		s.cfg.Pricing.FallbackFile,
+		"model_prices_and_context_window.json",
+		pricingresources.FallbackPricing,
+	)
 	if err != nil {
 		logger.LegacyPrintf("service.pricing", "[Pricing] Fallback merge skipped: %v", err)
 		return data
@@ -1110,25 +1122,58 @@ func warnDroppedLongContextLadders(old, next map[string]*LiteLLMModelPricing) {
 // useFallbackPricing 使用回退价格文件
 func (s *PricingService) useFallbackPricing() error {
 	fallbackFile := s.cfg.Pricing.FallbackFile
-
-	if _, err := os.Stat(fallbackFile); os.IsNotExist(err) {
-		return fmt.Errorf("fallback file not found: %s", fallbackFile)
+	data, err := readPricingResourceFile(
+		fallbackFile,
+		"model_prices_and_context_window.json",
+		pricingresources.FallbackPricing,
+	)
+	if err != nil {
+		return fmt.Errorf("fallback file not found: %s: %w", fallbackFile, err)
 	}
 
 	logger.LegacyPrintf("service.pricing", "[Pricing] Using fallback file: %s", fallbackFile)
 
 	// 复制到数据目录
-	data, err := os.ReadFile(fallbackFile)
-	if err != nil {
-		return fmt.Errorf("read fallback failed: %w", err)
-	}
-
 	pricingFile := s.getPricingFilePath()
 	if err := os.WriteFile(pricingFile, data, 0644); err != nil { //nolint:gosec // G703: 路径为配置的数据目录 + 硬编码文件名，非请求输入
 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to copy fallback: %v", err)
 	}
 
-	return s.loadPricingData(fallbackFile)
+	pricingData, customFilesHash, err := s.buildPricingData(data)
+	if err != nil {
+		return fmt.Errorf("parse fallback data: %w", err)
+	}
+	hash := sha256.Sum256(data)
+	s.mu.Lock()
+	s.pricingData = pricingData
+	s.localHash = hex.EncodeToString(hash[:])
+	s.customFilesHash = customFilesHash
+	s.lastUpdated = time.Now()
+	s.mu.Unlock()
+	return nil
+}
+
+// readPricingResourceFile loads an operator-visible file first. When the
+// configured path is the shipped default and the repository checkout is not
+// present (the normal standalone-binary layout), it falls back to the copy
+// embedded in the executable. Explicit custom paths never fall back silently.
+func readPricingResourceFile(path, defaultFileName string, embeddedFallback func() []byte) ([]byte, error) {
+	body, err := os.ReadFile(path)
+	if err == nil {
+		return body, nil
+	}
+	if !os.IsNotExist(err) || embeddedFallback == nil || defaultFileName == "" {
+		return nil, err
+	}
+	defaultPath := filepath.ToSlash(filepath.Join("resources", "model-pricing", defaultFileName))
+	if filepath.ToSlash(filepath.Clean(strings.TrimSpace(path))) != defaultPath {
+		return nil, err
+	}
+	body = embeddedFallback()
+	if len(body) == 0 {
+		return nil, err
+	}
+	return body, nil
 }
 
 // fetchRemoteHash 从远程获取哈希值

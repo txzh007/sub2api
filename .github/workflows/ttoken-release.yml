@@ -86,17 +86,94 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  release:
-    needs: [validate, publish-image]
+  publish-binary:
+    needs: [validate, test]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build embedded frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache-dependency-path: backend/go.sum
+
+      - name: Build Linux AMD64 release binary
+        working-directory: backend
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          go version | grep -q 'go1.27.0'
+          mkdir -p ../release-assets
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -tags embed \
+            -trimpath \
+            -ldflags="-s -w -X main.Version=${RELEASE_VERSION} -X main.Commit=${RELEASE_COMMIT} -X main.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.BuildType=release" \
+            -o ../release-assets/sub2api \
+            ./cmd/server
+          ../release-assets/sub2api --version
+          cp ../deploy/ttoken.service ../release-assets/ttoken.service
+          archive="ttoken_${RELEASE_VERSION}_linux_amd64.tar.gz"
+          tar -C ../release-assets -czf "../release-assets/${archive}" sub2api ttoken.service
+          rm ../release-assets/sub2api ../release-assets/ttoken.service
+          cd ../release-assets
+          sha256sum "${archive}" > checksums.txt
+
+      - name: Upload binary release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: ttoken-release-assets
+          path: |
+            release-assets/ttoken_*_linux_amd64.tar.gz
+            release-assets/checksums.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: [validate, publish-image, publish-binary]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: ttoken-release-assets
+          path: release-assets
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           name: TToken ${{ needs.validate.outputs.version }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/ttoken_*_linux_amd64.tar.gz
+            release-assets/checksums.txt
           body: |
             TToken ${{ needs.validate.outputs.version }} is based on the Sub2API version recorded in `backend/cmd/server/VERSION`.
+
+            Linux AMD64 binary deployments can update from the TToken admin version menu. The archive is verified against `checksums.txt` before the executable is atomically replaced.
 
             ```bash
             docker pull ${{ needs.validate.outputs.image }}:${{ needs.validate.outputs.version }}

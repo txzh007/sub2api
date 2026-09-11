@@ -157,6 +157,8 @@ services:
       # Proxy for accessing GitHub (online updates + pricing data)
       # Examples: http://host:port, socks5://host:port
       - UPDATE_PROXY_URL=${UPDATE_PROXY_URL:-}
+      - UPDATE_REPOSITORY=${UPDATE_REPOSITORY:-txzh007/sub2api}
+      - UPDATE_TAG_PREFIX=${UPDATE_TAG_PREFIX:-ttoken-v}
 
       # =======================================================================
       # Gateway Upstream, Scheduling & Image Configuration

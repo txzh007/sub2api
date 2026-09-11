@@ -1217,6 +1217,10 @@ update:
   # Leave empty for direct connection (recommended for overseas servers)
   # 留空表示直连（适用于海外服务器）
   proxy_url: ""
+  # TToken independent GitHub release channel. Only matching tags are eligible
+  # for online update and rollback; upstream Sub2API v* releases are ignored.
+  repository: "txzh007/sub2api"
+  tag_prefix: "ttoken-v"
 
 # =============================================================================
 # Image Storage (异步图片任务结果对象存储)
