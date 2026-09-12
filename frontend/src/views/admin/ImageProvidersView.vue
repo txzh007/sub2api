@@ -26,9 +26,6 @@
               <span v-for="model in modelNames(row)" :key="model" class="rounded bg-gray-100 px-2 py-1 text-xs dark:bg-dark-700">{{ model }}</span>
             </div>
           </template>
-          <template #cell-codex_mapping="{ row }">
-            <span class="break-all font-mono text-xs text-gray-700 dark:text-dark-200">{{ codexModelMapping(row) }}</span>
-          </template>
           <template #cell-status="{ row }">
             <span :class="row.status === 'active' && row.schedulable ? 'text-emerald-600' : 'text-gray-500'">{{ row.status === 'active' && row.schedulable ? t('common.enabled') : t('imageProviders.disabled') }}</span>
           </template>
@@ -65,26 +62,6 @@
           <input id="image-provider-key" v-model="form.apiKey" class="input font-mono" type="password" autocomplete="new-password" :required="!editing" :placeholder="editing ? t('imageProviders.keepKey') : 'sk-…'" />
         </div>
         <div>
-          <div class="mb-4 rounded-lg border border-primary-200 bg-primary-50/60 p-4 dark:border-primary-900/60 dark:bg-primary-900/10">
-            <p class="mb-3 text-sm font-medium text-gray-900 dark:text-dark-100">{{ t('imageProviders.codexModelMapping') }}</p>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label for="image-provider-codex-model" class="input-label">{{ t('imageProviders.codexBuiltinModel') }}</label>
-                <input id="image-provider-codex-model" v-model="form.codexModel" class="input font-mono" placeholder="gpt-image-2" />
-              </div>
-              <div>
-                <label for="image-provider-codex-target" class="input-label">{{ t('imageProviders.codexTargetModel') }}</label>
-                <input id="image-provider-codex-target" v-model="form.codexTarget" class="input font-mono" list="image-provider-codex-target-options" :placeholder="t('imageProviders.codexTargetPlaceholder')" />
-                <datalist id="image-provider-codex-target-options">
-                  <option v-for="model in codexTargetOptions" :key="model" :value="model" />
-                </datalist>
-              </div>
-            </div>
-            <p class="input-hint mt-2">{{ t('imageProviders.codexModelHint') }}</p>
-            <p v-if="form.codexModel.trim() && form.codexTarget.trim()" class="mt-2 break-all font-mono text-xs text-primary-700 dark:text-primary-300">
-              {{ form.codexModel.trim() }} → {{ form.codexTarget.trim() }}
-            </p>
-          </div>
           <div class="mb-2 flex items-center justify-between gap-3">
             <span id="image-provider-models-label" class="input-label mb-0">{{ t('imageProviders.models') }}</span>
             <button type="button" class="btn btn-secondary" :disabled="fetchingModels || saving || !canFetchModels" @click="fetchModels">
@@ -226,17 +203,7 @@ const copySourceID = ref<number | null>(null)
 const copyError = ref('')
 type ImageAccountPlatform = 'openai' | 'gemini' | 'grok'
 
-const defaultCodexImageModel = 'gpt-image-2'
-const emptyForm = () => ({
-  name: '',
-  platform: 'openai' as ImageAccountPlatform,
-  baseURL: '',
-  apiKey: '',
-  codexModel: defaultCodexImageModel,
-  codexTarget: '',
-  models: '',
-  concurrency: 3
-})
+const emptyForm = () => ({ name: '', platform: 'openai' as ImageAccountPlatform, baseURL: '', apiKey: '', models: '', concurrency: 3 })
 const form = ref(emptyForm())
 const fetchingModels = ref(false)
 const remoteModels = ref<string[] | null>(null)
@@ -250,32 +217,13 @@ const visibleRemoteModels = computed(() => (remoteModels.value || []).filter(mod
   (!imageModelsOnly.value || /image|dall-e|imagen|banana|flux|stable-diffusion|sdxl/i.test(model)) &&
   model.toLowerCase().includes(modelSearch.value.trim().toLowerCase())
 ))
-const codexMappingLine = computed(() => {
-  const model = form.value.codexModel.trim()
-  const target = form.value.codexTarget.trim()
-  return model && target ? `${model}=${target}` : ''
-})
-const codexTargetOptions = computed(() => [...new Set([
-  ...(remoteModels.value || []),
-  ...modelLines().map(modelTarget)
-])].sort())
-const selectedModelTargets = computed(() => new Set(allModelLines().map(modelTarget)))
-const selectedModels = computed(() => [...new Set(allModelLines())].map(line => ({ line, name: line.split('=')[0].trim(), target: modelTarget(line) })))
+const selectedModelTargets = computed(() => new Set(modelLines().map(modelTarget)))
+const selectedModels = computed(() => [...new Set(modelLines())].map(line => ({ line, name: line.split('=')[0].trim(), target: modelTarget(line) })))
 
 function modelLines() { return form.value.models.split('\n').map(line => line.trim()).filter(Boolean) }
-function allModelLines() { return [...modelLines(), ...(codexMappingLine.value ? [codexMappingLine.value] : [])] }
 function modelTarget(line: string) { return line.includes('=') ? line.slice(line.indexOf('=') + 1).trim() : line }
-function removeSelectedModel(line: string) {
-  if (line === codexMappingLine.value) {
-    form.value.codexTarget = ''
-    return
-  }
-  form.value.models = modelLines().filter(value => value !== line).join('\n')
-}
-function clearSelectedModels() {
-  form.value.models = ''
-  form.value.codexTarget = ''
-}
+function removeSelectedModel(line: string) { form.value.models = modelLines().filter(value => value !== line).join('\n') }
+function clearSelectedModels() { form.value.models = '' }
 
 function toggleRemoteModel(model: string, checked: boolean) {
   const lines = modelLines()
@@ -337,7 +285,6 @@ const columns = computed(() => [
   { key: 'platform', label: t('imageProviders.accountType') },
   { key: 'base_url', label: 'Base URL' },
   { key: 'models', label: t('imageProviders.models') },
-  { key: 'codex_mapping', label: t('imageProviders.codexMappingColumn') },
   { key: 'status', label: t('common.status') },
   { key: 'actions', label: t('common.actions') }
 ])
@@ -348,13 +295,6 @@ function accountTypeLabel(platform: string) {
 
 function modelNames(account: AccountListItem) {
   return Object.keys((account.credentials?.model_mapping || {}) as Record<string, string>)
-}
-
-function codexModelMapping(account: AccountListItem) {
-  const model = String(account.credentials?.codex_image_model || defaultCodexImageModel).trim() || defaultCodexImageModel
-  const mapping = (account.credentials?.model_mapping || {}) as Record<string, string>
-  const target = String(mapping[model] || '').trim()
-  return target ? `${model} → ${target}` : '—'
 }
 
 function message(error: unknown) {
@@ -454,15 +394,12 @@ async function openEdit(id: number) {
     const account = await adminAPI.accounts.getById(id)
     editing.value = account
     const mapping = (account.credentials?.model_mapping || {}) as Record<string, string>
-    const savedCodexModel = String(account.credentials?.codex_image_model || defaultCodexImageModel).trim() || defaultCodexImageModel
     form.value = {
       name: account.name,
       platform: account.platform as ImageAccountPlatform,
       baseURL: String(account.credentials?.base_url || ''),
       apiKey: '',
-      codexModel: savedCodexModel,
-      codexTarget: String(mapping[savedCodexModel] || ''),
-      models: Object.entries(mapping).filter(([model]) => model !== savedCodexModel).map(([model, target]) => model === target ? model : `${model}=${target}`).join('\n'),
+      models: Object.entries(mapping).map(([model, target]) => model === target ? model : `${model}=${target}`).join('\n'),
       concurrency: account.concurrency
     }
     formError.value = ''
@@ -496,19 +433,10 @@ async function save() {
     }
     mapping[name] = target
   }
-  const codexModel = form.value.codexModel.trim()
-  const codexTarget = form.value.codexTarget.trim()
-  if (codexTarget && (!codexModel || codexModel.includes('*') || codexTarget.includes('*'))) {
-    formError.value = t('imageProviders.invalidCodexMapping')
-    return
-  }
-  if (codexModel && codexTarget) mapping[codexModel] = codexTarget
   saving.value = true
   formError.value = ''
   try {
     const credentials: Record<string, unknown> = { ...editing.value?.credentials, base_url: form.value.baseURL.trim(), model_mapping: mapping }
-    if (codexModel) credentials.codex_image_model = codexModel
-    else delete credentials.codex_image_model
     if (form.value.apiKey.trim()) credentials.api_key = form.value.apiKey.trim()
     if (editing.value) {
       await adminAPI.accounts.update(editing.value.id, { name: form.value.name.trim(), credentials, concurrency: form.value.concurrency })

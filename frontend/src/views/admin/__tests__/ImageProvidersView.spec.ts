@@ -11,7 +11,7 @@ const render = () => mount(ImageProvidersView, { global: { stubs: {
   AppLayout: { template: '<div><slot /></div>' },
   TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /></div>' },
   BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
-  DataTable: { props: ['data'], template: '<div><template v-for="row in data"><slot name="cell-codex_mapping" :row="row" /><slot name="cell-actions" :row="row" /></template></div>' },
+  DataTable: { props: ['data'], template: '<div><slot v-for="row in data" name="cell-actions" :row="row" /></div>' },
   Pagination: true, RouterLink: true, Select: SelectStub
 } } })
 
@@ -32,7 +32,6 @@ describe('independent image providers', () => {
     await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === 'imageProviders.create')!.trigger('click')
     expect(wrapper.findComponent(SelectStub).props('modelValue')).toBe('openai')
-    expect((wrapper.get('#image-provider-codex-model').element as HTMLInputElement).value).toBe('gpt-image-2')
     expect(wrapper.findComponent(SelectStub).props('options')).toEqual([
       { value: 'openai', label: 'OpenAI' },
       { value: 'gemini', label: 'Gemini' },
@@ -45,31 +44,13 @@ describe('independent image providers', () => {
     await wrapper.findAll('button').find(button => button.text() === 'imageProviders.fetchModels')!.trigger('click')
     await flushPromises()
     await wrapper.get('input[value="gemini-3.1-flash-image"]').setValue(true)
-    await wrapper.get('#image-provider-codex-target').setValue('gemini-3.1-flash-image')
+    await wrapper.get('input[value="gpt-image-2"]').setValue(true)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ platform: 'openai', type: 'apikey', purpose: 'image_provider', group_ids: [24],
-      credentials: { base_url: 'https://images.example/v1', api_key: 'test-secret', codex_image_model: 'gpt-image-2', model_mapping: {
-        'gemini-3.1-flash-image': 'gemini-3.1-flash-image', 'gpt-image-2': 'gemini-3.1-flash-image'
+      credentials: { base_url: 'https://images.example/v1', api_key: 'test-secret', model_mapping: {
+        'gemini-3.1-flash-image': 'gemini-3.1-flash-image', 'gpt-image-2': 'gpt-image-2'
       } }
-    }))
-  })
-
-  it('stores a changed Codex built-in model as an ordinary model alias', async () => {
-    const wrapper = render()
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.create')!.trigger('click')
-    await wrapper.get('#image-provider-name').setValue('Future Codex Images')
-    await wrapper.get('#image-provider-url').setValue('https://images.example/v1')
-    await wrapper.get('#image-provider-key').setValue('test-secret')
-    await wrapper.get('#image-provider-codex-model').setValue('gpt-image-3')
-    await wrapper.get('#image-provider-codex-target').setValue('grok-imagine-image-2.0')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(api.create.mock.calls[0][0].credentials).toEqual(expect.objectContaining({
-      codex_image_model: 'gpt-image-3',
-      model_mapping: { 'gpt-image-3': 'grok-imagine-image-2.0' }
     }))
   })
 
@@ -112,7 +93,6 @@ describe('independent image providers', () => {
     api.get.mockResolvedValue(account)
     const wrapper = render()
     await flushPromises()
-    expect(wrapper.text()).toContain('gpt-image-2 → gpt-image-2')
     await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
     await flushPromises()
     expect(api.preview).toHaveBeenCalledWith({ account_id: 100, platform: 'openai', base_url: 'https://old.example' })
@@ -122,7 +102,7 @@ describe('independent image providers', () => {
     await wrapper.get('#image-provider-url').setValue('https://new.example')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(api.update.mock.calls[0][1].credentials).toEqual({ base_url: 'https://new.example', codex_image_model: 'gpt-image-2', custom_setting: true, model_mapping: { 'gpt-image-2': 'gpt-image-2' } })
+    expect(api.update.mock.calls[0][1].credentials).toEqual({ base_url: 'https://new.example', custom_setting: true, model_mapping: { 'gpt-image-2': 'gpt-image-2' } })
     expect(api.update.mock.calls[0][1]).not.toHaveProperty('group_ids')
   })
 

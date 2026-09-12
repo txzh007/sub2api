@@ -22,8 +22,6 @@ TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 C
 
 推荐把 Codex 固定请求的 `gpt-image-2` 当作公开别名，在生图接口的模型映射中配置 `gpt-image-2=实际上游模型`，例如 `gpt-image-2=gemini-3.1-flash-image`。Key 选择 `gpt-image-2` 后，Codex 无需知道真实供应商或模型名；更换上游时只修改生图接口映射。也可以让 Key 直接选择具体图片模型，保留现有精确指定能力。
 
-“生图接口”的新增和编辑弹窗提供“当前 Codex 内置模型”和“映射到上游模型”两个快捷字段。当前别名默认是 `gpt-image-2`，保存后仍写入账号原有的 `model_mapping`，并用 `credentials.codex_image_model` 记录哪个映射需要在表格和下次编辑时作为 Codex 映射展示。该辅助字段不参与请求转发，也不需要数据库迁移；Codex 将来更换内置模型名时，只需修改这里的别名和目标。
-
 图片使用生图分组的账号、价格、用户分组倍率和订阅额度；文字使用主分组对应配置。二者仍计入同一 Key 的额度和用量。每次桥接都会重新检查生图分组权限和模型列表，禁用分组或撤销权限后不会继续使用旧授权。
 
 管理 API：`GET /api/v1/keys/image-bridge-models` 返回 `{group_id, group_name, models}`，创建与编辑 Key 的请求增加 `image_bridge_model`。模型字符串表示指定模型，`""` 表示不桥接，`null` 表示跟随默认；编辑时省略此字段保留原选择。新建页面默认不桥接，旧 Key 迁移后为 `null`。
