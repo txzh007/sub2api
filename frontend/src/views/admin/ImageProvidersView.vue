@@ -14,33 +14,63 @@
           <span>{{ t('imageProviders.groupUnavailable') }}</span>
           <RouterLink to="/admin/groups" class="underline">{{ t('nav.groups') }}</RouterLink>
         </div>
-        <section class="mt-3 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-dark-600 dark:bg-dark-800/60">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-gray-900 dark:text-dark-100">{{ t('imageProviders.codexMappingTitle') }}</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.codexMappingHint') }}</p>
+        <section class="relative mt-4 overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-sm dark:border-primary-900/50 dark:bg-dark-800">
+          <div class="absolute inset-y-0 left-0 w-1 bg-primary-500" aria-hidden="true"></div>
+          <div class="border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="flex min-w-0 items-start gap-3">
+                <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 font-mono text-base font-semibold text-primary-700 ring-1 ring-inset ring-primary-100 dark:bg-primary-900/30 dark:text-primary-300 dark:ring-primary-800">
+                  ↗
+                </div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-dark-100">{{ t('imageProviders.codexMappingTitle') }}</h2>
+                    <span :class="codexMapping.target_model.trim() ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 ring-gray-500/10 dark:bg-dark-700 dark:text-dark-300'" class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset">
+                      <span :class="codexMapping.target_model.trim() ? 'bg-emerald-500' : 'bg-gray-400'" class="h-1.5 w-1.5 rounded-full"></span>
+                      {{ codexMapping.target_model.trim() ? t('imageProviders.codexMappingActive') : t('imageProviders.codexMappingInactive') }}
+                    </span>
+                  </div>
+                  <p class="mt-1 max-w-3xl text-sm leading-5 text-gray-500 dark:text-dark-400">{{ t('imageProviders.codexMappingHint') }}</p>
+                </div>
+              </div>
+              <button class="btn btn-primary shrink-0" :disabled="codexMappingLoading || codexMappingSaving" @click="saveCodexMapping">
+                {{ codexMappingSaving ? t('common.saving') : t('imageProviders.codexMappingSave') }}
+              </button>
             </div>
-            <button class="btn btn-primary" :disabled="codexMappingLoading || codexMappingSaving" @click="saveCodexMapping">
-              {{ codexMappingSaving ? t('common.saving') : t('imageProviders.codexMappingSave') }}
-            </button>
           </div>
-          <div class="mt-4 grid gap-3 md:grid-cols-2">
-            <div>
-              <label for="codex-builtin-image-model" class="input-label">{{ t('imageProviders.codexBuiltinModel') }}</label>
-              <input id="codex-builtin-image-model" v-model="codexMapping.builtin_model" class="input font-mono" :disabled="codexMappingLoading" />
+
+          <div class="grid items-stretch gap-3 px-5 py-5 md:grid-cols-[minmax(0,1fr)_5rem_minmax(0,1fr)]">
+            <div class="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 dark:border-dark-600 dark:bg-dark-700/50">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="codex-builtin-image-model" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-300">{{ t('imageProviders.codexRequestModel') }}</label>
+                <span class="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-400 ring-1 ring-inset ring-gray-200 dark:bg-dark-800 dark:ring-dark-600">CODEX</span>
+              </div>
+              <input id="codex-builtin-image-model" v-model="codexMapping.builtin_model" class="input border-0 bg-white font-mono shadow-sm ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-primary-500 dark:bg-dark-800 dark:ring-dark-600" :disabled="codexMappingLoading" />
+              <p class="mt-2 text-xs text-gray-400 dark:text-dark-400">{{ t('imageProviders.codexBuiltinModel') }}</p>
             </div>
-            <div>
-              <label for="codex-upstream-image-model" class="input-label">{{ t('imageProviders.codexTargetModel') }}</label>
-              <input id="codex-upstream-image-model" v-model="codexMapping.target_model" class="input font-mono" list="codex-image-target-options" :disabled="codexMappingLoading" :placeholder="t('imageProviders.codexTargetPlaceholder')" />
+
+            <div class="flex items-center justify-center" aria-hidden="true">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-sm ring-4 ring-primary-50 dark:ring-primary-900/30 md:hidden">↓</span>
+              <div class="hidden w-full items-center md:flex">
+                <span class="h-px flex-1 bg-primary-200 dark:bg-primary-900"></span>
+                <span class="mx-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-sm ring-4 ring-primary-50 dark:ring-primary-900/30">→</span>
+                <span class="h-px flex-1 bg-primary-200 dark:bg-primary-900"></span>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-primary-200 bg-primary-50/40 p-3.5 dark:border-primary-900/70 dark:bg-primary-900/10">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="codex-upstream-image-model" class="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-300">{{ t('imageProviders.codexResolvedModel') }}</label>
+                <span class="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-primary-500 ring-1 ring-inset ring-primary-100 dark:bg-dark-800 dark:ring-primary-900">IMAGE GROUP</span>
+              </div>
+              <input id="codex-upstream-image-model" v-model="codexMapping.target_model" class="input border-0 bg-white font-mono shadow-sm ring-1 ring-inset ring-primary-200 focus:ring-2 focus:ring-primary-500 dark:bg-dark-800 dark:ring-primary-900" list="codex-image-target-options" :disabled="codexMappingLoading" :placeholder="t('imageProviders.codexTargetPlaceholder')" />
               <datalist id="codex-image-target-options">
                 <option v-for="model in codexTargetOptions" :key="model" :value="model" />
               </datalist>
+              <p class="mt-2 text-xs text-primary-600/70 dark:text-primary-300/70">{{ t('imageProviders.codexTargetModel') }}</p>
             </div>
           </div>
-          <p v-if="codexMapping.target_model.trim()" class="mt-3 break-all font-mono text-xs text-primary-700 dark:text-primary-300">
-            {{ codexMapping.builtin_model.trim() || '—' }} → {{ codexMapping.target_model.trim() }}
-          </p>
-          <p v-if="codexMappingError" role="alert" class="mt-3 text-sm text-red-600 dark:text-red-400">{{ codexMappingError }}</p>
+          <p v-if="codexMappingError" role="alert" class="mx-5 mb-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">{{ codexMappingError }}</p>
         </section>
       </template>
       <template #table>
