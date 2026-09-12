@@ -13,6 +13,8 @@ const (
 	CompositeRouteMatchPrefix = "prefix"
 
 	CompositeRouteEndpointAny             = "any"
+	CompositeRouteEndpointOpenAI          = "openai"
+	CompositeRouteEndpointAnthropic       = "anthropic"
 	CompositeRouteEndpointMessages        = "messages"
 	CompositeRouteEndpointCountTokens     = "count_tokens"
 	CompositeRouteEndpointResponses       = "responses"
@@ -100,7 +102,9 @@ func normalizeCompositeRouteEndpoint(endpoint string) string {
 		return CompositeRouteEndpointAny
 	}
 	switch endpoint {
-	case CompositeRouteEndpointMessages,
+	case CompositeRouteEndpointOpenAI,
+		CompositeRouteEndpointAnthropic,
+		CompositeRouteEndpointMessages,
 		CompositeRouteEndpointCountTokens,
 		CompositeRouteEndpointResponses,
 		CompositeRouteEndpointChatCompletions,

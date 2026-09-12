@@ -200,6 +200,86 @@ func TestCompositeRouteResolverPrefersEndpointSpecificLongestPrefix(t *testing.T
 	require.Equal(t, int64(2), decision.Route.ID)
 }
 
+func TestCompositeRouteResolverAssociatesSameModelWithClientProtocol(t *testing.T) {
+	resolver := NewCompositeRouteResolver(compositeRouteRepoStub{
+		routes: []CompositeModelRoute{
+			{
+				ID:             1,
+				GroupID:        7,
+				PublicModel:    "shared-model",
+				MatchType:      CompositeRouteMatchExact,
+				TargetPlatform: PlatformGemini,
+				UpstreamModel:  "fallback-model",
+				Endpoint:       CompositeRouteEndpointAny,
+				Priority:       1,
+				Enabled:        true,
+			},
+			{
+				ID:             2,
+				GroupID:        7,
+				PublicModel:    "shared-model",
+				MatchType:      CompositeRouteMatchExact,
+				TargetPlatform: PlatformOpenAI,
+				UpstreamModel:  "gpt-5.5",
+				Endpoint:       CompositeRouteEndpointOpenAI,
+				Priority:       100,
+				Enabled:        true,
+			},
+			{
+				ID:             3,
+				GroupID:        7,
+				PublicModel:    "shared-model",
+				MatchType:      CompositeRouteMatchExact,
+				TargetPlatform: PlatformAnthropic,
+				UpstreamModel:  "claude-sonnet-4-6",
+				Endpoint:       CompositeRouteEndpointAnthropic,
+				Priority:       100,
+				Enabled:        true,
+			},
+			{
+				ID:             4,
+				GroupID:        7,
+				PublicModel:    "shared-model",
+				MatchType:      CompositeRouteMatchExact,
+				TargetPlatform: PlatformAntigravity,
+				UpstreamModel:  "claude-exact-messages",
+				Endpoint:       CompositeRouteEndpointMessages,
+				Priority:       100,
+				Enabled:        true,
+			},
+		},
+	})
+
+	tests := []struct {
+		name         string
+		endpoint     string
+		wantRouteID  int64
+		wantPlatform string
+		wantModel    string
+	}{
+		{"responses uses OpenAI client protocol route", CompositeRouteEndpointResponses, 2, PlatformOpenAI, "gpt-5.5"},
+		{"chat completions uses OpenAI client protocol route", CompositeRouteEndpointChatCompletions, 2, PlatformOpenAI, "gpt-5.5"},
+		{"embeddings uses OpenAI client protocol route", CompositeRouteEndpointEmbeddings, 2, PlatformOpenAI, "gpt-5.5"},
+		{"images uses OpenAI client protocol route", CompositeRouteEndpointImages, 2, PlatformOpenAI, "gpt-5.5"},
+		{"count tokens uses Anthropic client protocol route", CompositeRouteEndpointCountTokens, 3, PlatformAnthropic, "claude-sonnet-4-6"},
+		{"exact messages route overrides Anthropic protocol route", CompositeRouteEndpointMessages, 4, PlatformAntigravity, "claude-exact-messages"},
+		{"unrelated protocol falls back to any", CompositeRouteEndpointGemini, 1, PlatformGemini, "fallback-model"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, err := resolver.Resolve(context.Background(), 7, "shared-model", tt.endpoint)
+
+			require.NoError(t, err)
+			require.True(t, decision.Matched)
+			require.NotNil(t, decision.Route)
+			require.Equal(t, tt.wantRouteID, decision.Route.ID)
+			require.Equal(t, tt.wantPlatform, decision.TargetPlatform)
+			require.Equal(t, tt.wantModel, decision.UpstreamModel)
+		})
+	}
+}
+
 // TestCompositeRouteResolverPrefixEmptyUpstreamPassesThroughRequestedModel 验证：
 // 前缀匹配路由留空 upstream_model 时，转发的是具体请求模型（各自原样），而不是
 // 塌缩成 public_model。这是「留空 = 透传原始模型」语义的核心场景。

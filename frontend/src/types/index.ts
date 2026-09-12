@@ -669,6 +669,8 @@ export type CompositeRouteMatchType = 'exact' | 'prefix'
 
 export type CompositeRouteEndpoint =
   | 'any'
+  | 'openai'
+  | 'anthropic'
   | 'messages'
   | 'count_tokens'
   | 'responses'

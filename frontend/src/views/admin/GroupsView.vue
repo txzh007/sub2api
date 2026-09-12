@@ -4067,6 +4067,9 @@
                   v-model="compositeRouteForm.endpoint"
                   :options="compositeRouteEndpointOptions"
                 />
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.compositeRoutes.endpointHint") }}
+                </p>
               </div>
             </div>
 
@@ -4615,6 +4618,14 @@ const compositeRoutePlatformOptions = computed(() => [
 
 const compositeRouteEndpointOptions = computed(() => [
   { value: "any", label: t("admin.groups.compositeRoutes.endpoints.any") },
+  {
+    value: "openai",
+    label: t("admin.groups.compositeRoutes.endpoints.openai"),
+  },
+  {
+    value: "anthropic",
+    label: t("admin.groups.compositeRoutes.endpoints.anthropic"),
+  },
   {
     value: "messages",
     label: t("admin.groups.compositeRoutes.endpoints.messages"),

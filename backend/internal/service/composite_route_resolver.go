@@ -116,7 +116,8 @@ func matchCompositeRoute(routes []CompositeModelRoute, model, endpoint string) (
 	candidates := make([]candidate, 0, len(routes))
 	for _, route := range routes {
 		route.Endpoint = normalizeCompositeRouteEndpoint(route.Endpoint)
-		if route.Endpoint != endpoint && route.Endpoint != CompositeRouteEndpointAny {
+		endpointWeight, endpointMatched := compositeRouteEndpointMatchWeight(route.Endpoint, endpoint)
+		if !endpointMatched {
 			continue
 		}
 		route.MatchType = normalizeCompositeRouteMatchType(route.MatchType)
@@ -140,10 +141,6 @@ func matchCompositeRoute(routes []CompositeModelRoute, model, endpoint string) (
 			matchStrength = 1
 		default:
 			continue
-		}
-		endpointWeight := 0
-		if route.Endpoint == endpoint {
-			endpointWeight = 1
 		}
 		candidates = append(candidates, candidate{
 			route:          route,
@@ -173,4 +170,33 @@ func matchCompositeRoute(routes []CompositeModelRoute, model, endpoint string) (
 		return a.route.ID < b.route.ID
 	})
 	return candidates[0].route, true
+}
+
+// compositeRouteEndpointMatchWeight ranks routes by how closely their scope
+// matches the protocol used by the client. Exact endpoint rules remain the
+// most specific, protocol-family rules cover all endpoints of that client
+// protocol, and "any" remains the final fallback.
+func compositeRouteEndpointMatchWeight(routeEndpoint, requestEndpoint string) (int, bool) {
+	if routeEndpoint == requestEndpoint {
+		return 2, true
+	}
+	if routeEndpoint == CompositeRouteEndpointAny {
+		return 0, true
+	}
+	switch routeEndpoint {
+	case CompositeRouteEndpointOpenAI:
+		switch requestEndpoint {
+		case CompositeRouteEndpointResponses,
+			CompositeRouteEndpointChatCompletions,
+			CompositeRouteEndpointEmbeddings,
+			CompositeRouteEndpointImages:
+			return 1, true
+		}
+	case CompositeRouteEndpointAnthropic:
+		switch requestEndpoint {
+		case CompositeRouteEndpointMessages, CompositeRouteEndpointCountTokens:
+			return 1, true
+		}
+	}
+	return 0, false
 }
