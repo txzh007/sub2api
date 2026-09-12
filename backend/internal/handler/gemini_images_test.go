@@ -169,7 +169,7 @@ func TestGeminiImagesCodexHostedTool(t *testing.T) {
 			c.JSON(200, gin.H{"id": "resp_final", "object": "response", "status": "completed", "output": []any{gin.H{"id": "msg_final", "type": "message", "role": "assistant", "status": "completed", "content": []any{gin.H{"type": "output_text", "text": "Here is your image.", "annotations": []any{}}}}}})
 		}
 	}
-	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"namespace","name":"image_gen","tools":[]}]}`)
+	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"image_generation"}]}`)
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.ClientRequestID, "outer-client-request"))
 	c.Request.Header.Set("User-Agent", "codex_cli_rs")
 	h.WrapGeminiImageResponses(text, service.NewCompositeRouteResolver(nil))(c)
@@ -195,6 +195,56 @@ func TestGeminiImagesCodexHostedTool(t *testing.T) {
 		require.Equal(t, sequence, gjson.Get(strings.TrimPrefix(line, "data: "), "sequence_number").Int())
 		sequence++
 	}
+}
+
+func TestGeminiImagesCodexNativeImageToolPassesThroughForLocalFileDelivery(t *testing.T) {
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		t.Fatal("the Responses bridge must not execute Codex's local image tool")
+		return nil, nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+
+	for _, body := range []string{
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`,
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"function","name":"image_gen.imagegen","parameters":{"type":"object"}}]}`,
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"additional_tools":[{"type":"function","name":"image_gen__imagegen","parameters":{"type":"object"}}]}`,
+	} {
+		c, w := geminiImagesTestContext(key, "/v1/responses", body)
+		c.Request.Header.Set("User-Agent", "codex_cli_rs")
+		nextCalled := false
+		h.WrapGeminiImageResponses(func(child *gin.Context) {
+			nextCalled = true
+			forwarded, _ := io.ReadAll(child.Request.Body)
+			require.JSONEq(t, body, string(forwarded))
+			child.Header("Content-Type", "text/event-stream")
+			child.Status(http.StatusOK)
+			_, _ = child.Writer.WriteString("event: response.output_text.delta\ndata: {\"delta\":\"native\"}\n\n")
+		}, nil)(c)
+		require.True(t, nextCalled)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `"delta":"native"`)
+		require.NotContains(t, w.Body.String(), "image bridge working")
+	}
+}
+
+func TestCodexNativeImageToolImagesRequestUsesSelectedBridgeModel(t *testing.T) {
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(req *http.Request) (*http.Response, error) {
+		require.Contains(t, req.URL.Path, service.DefaultGeminiImageModel+":generateContent")
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		require.Equal(t, "draw a cat", gjson.GetBytes(body, "contents.0.parts.0.text").String())
+		return geminiTestImageResponse(), nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+
+	c, w := geminiImagesTestContext(key, "/v1/images/generations", `{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)
+	h.WrapKeyImageBridge(func(*gin.Context) {
+		t.Fatal("a selected bridge model must own the Images request")
+	}, nil)(c)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, "aW1hZ2U=", gjson.Get(w.Body.String(), "data.0.b64_json").String())
+	require.Equal(t, service.DefaultGeminiImageModel, gjson.Get(w.Body.String(), "model").String())
 }
 
 func TestGeminiImagesCodexForcedToolAndReferences(t *testing.T) {

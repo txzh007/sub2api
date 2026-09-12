@@ -1,21 +1,22 @@
 # Gemini 生图兼容与二开升级
 
-本功能基于当前 Sub2API 分支增加两条链路：
+本功能基于当前 Sub2API 分支增加三条链路：
 
 - OpenAI Images 请求 → 独立生图上游，默认 OpenAI 协议；也可使用 Gemini 原生 `generateContent` 适配。
-- OpenAI 分组的 Codex HTTP Responses 请求 → 原有文本模型选择图片工具 → 网关调用独立生图接口 → 返回 `image_generation_call` 图片结果。
+- Codex 原生 `image_gen.imagegen` → Codex 客户端调用当前供应商的 Images API → TToken 改写为 Key 选择的生图模型 → Codex 客户端将结果保存为本地文件。
+- 仅提供 Responses 托管 `image_generation` 的客户端 → 网关执行独立生图接口 → 返回 `image_generation_call` 图片结果，作为兼容回退。
 
-第二条由网关执行图片工具，不需要客户端执行名为 `sub2api_generate_image` 的函数。它不改变 Codex 账号本身具备的权限，也不能控制客户端在本地单独执行的插件工具。
+TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 Codex 的客户端写入，因为远程网关无法访问用户的本地工作区。兼容回退链路才由网关执行名为 `sub2api_generate_image` 的内部函数。
 
 ## 创建密钥时选择生图模型
 
-在「API 密钥 → 创建密钥 / 编辑」中，主分组选择 **OpenAI 平台**的文字模型分组，例如 GPT - Pro，再在「生图桥接模型」中选择图片模型。仅 OpenAI 分组显示并启用桥接，Gemini、Claude、Grok、Composite 等分组不启用；切换到非 OpenAI 分组时清除原选择，后端也拒绝为非 OpenAI 分组保存桥接模型。保存后，OpenAI Images 请求和 Codex HTTP Responses 的图片工具使用这个选择，文字请求仍由主分组处理。
+在「API 密钥 → 创建密钥 / 编辑」中，主分组选择 **OpenAI 平台**的文字模型分组，例如 GPT - Pro，再在「生图桥接模型」中选择图片模型。仅 OpenAI 分组显示并启用桥接，Gemini、Claude、Grok、Composite 等分组不启用；切换到非 OpenAI 分组时清除原选择，后端也拒绝为非 OpenAI 分组保存桥接模型。保存后，OpenAI Images 请求和 Responses 托管图片工具使用这个选择；Codex 原生 `image_gen` 通过同一个 Images 入口获得所选模型，文字请求仍由主分组处理。
 
 模型列表来自名称为 **生图** 的分组，要求该分组启用、允许图片生成，且当前用户有权使用。候选项取自分组内可调度的 OpenAI、Gemini、Grok 账号的生图模型映射；启用了分组模型列表配置时，再取交集。不会根据主分组或全局价格表补充候选项。账号映射应包含具体模型名；只有通配符的映射不会展开为候选模型。
 
 生图分组使用 Composite 平台且多个平台暴露同名模型时，需配置 `images` 端点的明确路由。使用 OpenAI 兼容生图上游时，将 `gemini-3.1-flash-image` 等模型路由到 OpenAI 平台；只有原生 Gemini 上游才路由到 Gemini，协议由接口配置决定，不由模型前缀决定。
 
-- **选择模型**：生图请求的 `model` 会替换为所选模型，因此客户端仍传 `gpt-image-2` 即可。Codex 的文字 `model` 保持原值，图片工具使用所选模型。
+- **选择模型**：生图请求的 `model` 会替换为所选模型，因此 Codex 原生工具仍传 `gpt-image-2` 即可。Codex 的文字 `model` 保持原值，图片工具使用所选模型。
 - **不桥接**：该 Key 不执行这项内部工具桥接，Images 按主分组原有处理逻辑转发。
 - **跟随服务默认配置**：保留旧 Key 的全局配置和显式工具模型行为，见下文。
 
@@ -79,7 +80,7 @@ curl "$SUB2API_BASE_URL/v1/images/edits" \
 
 大型图片还受现有 `gateway.upstream_response_read_max_bytes` 限制（示例配置为 8 MiB）；按实际需要调整。桥接内部响应另外有 64 MiB 上限。现有 `/images/.../async` 任务接口未加入这条 Gemini 链路。
 
-## Codex 内部图片工具由 Gemini 执行
+## Codex 原生本地文件与托管工具兼容
 
 推荐保留原来的 GPT 编程模型与主分组，直接为 Key 选择 Gemini 生图桥接模型，不需要修改全局配置或重启。
 
@@ -92,7 +93,7 @@ gateway:
 
 也可向服务进程传入环境变量 `GATEWAY_CODEX_GEMINI_IMAGE_MODEL`。Docker Compose 的 `.env` 不会自动把任意变量传入容器，需要在服务的 `environment` 中声明，或挂载修改后的 `config.yaml`。修改后重启服务。
 
-配置为空且 Key 没有指定模型时，不自动改写普通 Codex 请求，原有 `codex_image_generation_bridge_enabled` 逻辑保持原样。OpenAI Key 显式传入 `tools: [{"type":"image_generation","model":"gemini-..."}]` 仍可从“生图”分组选择 Gemini 模型；这是本网关对 OpenAI 工具参数的扩展。非 OpenAI 分组的 Responses 按原有协议处理。
+配置为空且 Key 没有指定模型时，不自动改写 Images 或普通 Codex 请求，原有 `codex_image_generation_bridge_enabled` 逻辑保持原样。OpenAI Key 显式传入 `tools: [{"type":"image_generation","model":"gemini-..."}]` 仍可从“生图”分组选择 Gemini 模型；这是本网关对 OpenAI 工具参数的扩展。非 OpenAI 分组的 Responses 按原有协议处理。
 
 这版桥接覆盖 POST `/v1/responses`、`/responses`、`/backend-api/codex/responses`。客户端需使用 HTTP Responses；例如在用户级 Codex 配置中为自定义 provider 设置：
 
@@ -108,20 +109,19 @@ env_key = "SUB2API_API_KEY"
 supports_websockets = false
 ```
 
-启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。已使用真实上游验证 Images 文生图、参考图编辑和 `gpt-5.5` 的 HTTP Responses/SSE 内部生图链路；实际 Codex App 的界面集成仍需单独验证。
+启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。新版 Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口替换为 Key 选择的图片模型。Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
 
 开启后的行为与边界：
 
-- 网关将客户端的 `image_generation` 或 `image_gen` 工具声明替换为内部图片函数。没有声明工具的 Codex 请求也会增加该函数，由文本模型决定是否调用。
-- 只有实际调用图片工具时才检查生图接口的可用性；生图接口不可用不会阻止普通文字和其他工具请求。
-- 生图调用成功后返回原生形状的 `image_generation_call`，内部函数调用不会交给客户端执行。通常消耗一次文本决策请求、一次 Gemini 生图请求、一次文本续写请求；各调用使用独立计费请求 ID，复用现有计费。响应 `usage` 合并两次文本调用，Gemini 用量单独记录在服务端。
-- 文本续写失败时仍交付已生成的图片。`tool_choice: {"type":"image_generation"}` 强制生图时直接使用输入提示词，不执行文本决策与续写。
-- 当前先聚合内部请求，再发送 Responses 事件；因此开启后文本也不是逐 token 实时返回。普通客户端函数调用仍通过 Responses 工具事件交付。
-- 连续对话需要发送完整历史，包括图片结果。网关把自己的历史图片转换成视觉输入。暂不支持 `previous_response_id` 和 `background:true`，也不提供合成响应 ID 的服务端检索。
-- WebSocket、Responses 的 `/compact` 等子路径不执行本桥接。客户端本地 `image_gen` 插件若通过其他连接单独请求，不受这项配置控制。
-- 本地文件作为参考图时，需要客户端先上传为图片输入，网关不会按提示中的路径读取文件。
+- Codex 原生 `image_gen` namespace、扁平 `image_gen.imagegen` 和兼容名称 `image_gen__imagegen` 均原样透传；网关不会将它们改成 `image_generation_call`。
+- Codex 客户端负责执行原生工具、读取参考图片和保存成图；TToken 只处理它随后发出的 Images 请求。会话中的预览与工具结果完全沿用 Codex 原生行为，不再由网关额外合成一份 `image_generation_call`。
+- Images 请求到达 TToken 后，才检查生图分组、模型和接口可用性，并使用图片分组独立计费；生图接口不可用不会阻止普通文字请求。
+- Responses 原生 `image_generation` 仍使用服务端兼容回退。该链路返回协议规定的 Base64 `image_generation_call`，适用于没有 Codex 本地图片扩展的客户端，但不会产生本地文件。
+- 托管兼容链路通常消耗一次文本决策请求、一次生图请求、一次文本续写请求；各调用使用独立计费请求 ID。文本续写失败时仍交付已生成图片。
+- 只有托管兼容链路需要聚合内部请求，并受 `previous_response_id`、`background:true` 和 WebSocket 等限制；Codex 原生工具走普通 Responses 工具循环，不受这组桥接限制。
+- 本地文件参考图由 Codex 原生工具读取并上传，远程 TToken 不直接读取提示词中的本地路径。
 
-协议参考：[OpenAI 图片工具](https://platform.openai.com/docs/guides/tools-image-generation)、[Gemini 图片生成](https://ai.google.dev/gemini-api/docs/image-generation)、[Codex 配置参考](https://developers.openai.com/codex/config-reference)。
+协议参考：[OpenAI 图片工具](https://platform.openai.com/docs/guides/tools-image-generation)、[Gemini 图片生成](https://ai.google.dev/gemini-api/docs/image-generation)、[Codex 图片工具实现](https://github.com/openai/codex/blob/main/codex-rs/ext/image-generation/src/tool.rs)、[Codex 配置参考](https://developers.openai.com/codex/config-reference)。
 
 ## 后续升级 Sub2API
 

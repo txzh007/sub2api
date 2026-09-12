@@ -59,11 +59,12 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		requestModel, _ := request["model"].(string)
 		directImage := service.IsImageProviderModel(requestModel)
 		// A configured bridge must not turn every Codex Responses request into a
-		// buffered hosted-tool workflow. Only intercept requests that explicitly
-		// expose an image tool, or that directly target an image model. Ordinary
-		// text requests keep their original streaming path through next. Historical
-		// bridge images still need conversion to ordinary vision input, but that
-		// lightweight rewrite must preserve the client's stream setting.
+		// buffered hosted-tool workflow. In particular, image_gen is a local Codex
+		// extension: Codex calls the active provider's Images API and then persists
+		// the returned bytes in its own workspace. Intercepting that tool here turns
+		// the result into an inline image_generation_call and loses the local file.
+		// Only the Responses-hosted image_generation tool (or a request directly
+		// targeting an image model) belongs to this server-side bridge.
 		if model == "" {
 			next(c)
 			return
@@ -120,8 +121,7 @@ func findGeminiBridgeImageTool(request map[string]any) (map[string]any, bool) {
 		for _, raw := range tools {
 			tool, _ := raw.(map[string]any)
 			typ, _ := tool["type"].(string)
-			name, _ := tool["name"].(string)
-			if typ == "image_generation" || name == "image_gen" || name == "image_gen.imagegen" || name == "image_gen__imagegen" {
+			if typ == "image_generation" {
 				return tool, true
 			}
 		}
@@ -133,7 +133,7 @@ func isBridgeImageTool(raw any) bool {
 	tool, _ := raw.(map[string]any)
 	typ, _ := tool["type"].(string)
 	name, _ := tool["name"].(string)
-	return typ == "image_generation" || name == "image_gen" || name == "image_gen.imagegen" || name == "image_gen__imagegen" || name == geminiImageFunction
+	return typ == "image_generation" || name == geminiImageFunction
 }
 
 func imageBridgeInput(request map[string]any) (string, []string) {
@@ -242,7 +242,7 @@ func normalizeGeminiImageHistory(request map[string]any) bool {
 
 func imageToolChoiceForced(request map[string]any) bool {
 	choice, _ := request["tool_choice"].(map[string]any)
-	return choice["type"] == "image_generation" || choice["name"] == "image_gen.imagegen" || choice["name"] == "image_gen__imagegen" || choice["name"] == "image_gen" || (choice["namespace"] == "image_gen" && choice["name"] == "imagegen")
+	return choice["type"] == "image_generation"
 }
 
 func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool map[string]any, route service.CompositeRouteDecision, next gin.HandlerFunc) (map[string]any, *imageBridgeCapture, error) {
