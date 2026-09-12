@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ImageProvidersView from '../ImageProvidersView.vue'
 
-const api = vi.hoisted(() => ({ groups: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), copy: vi.fn(), update: vi.fn(), remove: vi.fn(), setSchedulable: vi.fn(), preview: vi.fn(), success: vi.fn(), error: vi.fn() }))
-vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: api.groups }, accounts: { list: api.list, getById: api.get, create: api.create, copyToImageProvider: api.copy, update: api.update, delete: api.remove, setSchedulable: api.setSchedulable, previewImageModels: api.preview } } }))
+const api = vi.hoisted(() => ({ groups: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), copy: vi.fn(), update: vi.fn(), remove: vi.fn(), setSchedulable: vi.fn(), preview: vi.fn(), getCodexMapping: vi.fn(), updateCodexMapping: vi.fn(), success: vi.fn(), error: vi.fn() }))
+vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: api.groups }, accounts: { list: api.list, getById: api.get, create: api.create, copyToImageProvider: api.copy, update: api.update, delete: api.remove, setSchedulable: api.setSchedulable, previewImageModels: api.preview }, settings: { getCodexImageModelMappingSettings: api.getCodexMapping, updateCodexImageModelMappingSettings: api.updateCodexMapping } } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: api.success, showError: api.error }) }))
 vi.mock('vue-i18n', async importOriginal => ({ ...await importOriginal<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 const SelectStub = { name: 'Select', props: ['modelValue', 'options', 'disabled'], template: '<div />' }
@@ -25,6 +25,24 @@ describe('independent image providers', () => {
     api.update.mockResolvedValue({ id: 100 })
     api.remove.mockReset().mockResolvedValue({ message: 'Account deleted successfully' })
     api.preview.mockReset().mockResolvedValue({ models: ['gpt-image-2', 'gemini-3.1-flash-image', 'gpt-5.5', 'custom-model'] })
+    api.getCodexMapping.mockResolvedValue({ builtin_model: 'gpt-image-2', target_model: '' })
+    api.updateCodexMapping.mockImplementation(settings => Promise.resolve(settings))
+  })
+
+  it('stores one global Codex mapping without changing provider credentials', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('#codex-upstream-image-model').setValue(' gemini-3.1-flash-image ')
+    await wrapper.findAll('button').find(button => button.text() === 'imageProviders.codexMappingSave')!.trigger('click')
+    await flushPromises()
+
+    expect(api.updateCodexMapping).toHaveBeenCalledWith({
+      builtin_model: 'gpt-image-2',
+      target_model: 'gemini-3.1-flash-image'
+    })
+    expect(api.update).not.toHaveBeenCalled()
+    expect(api.create).not.toHaveBeenCalled()
+    expect(api.success).toHaveBeenCalledWith('imageProviders.codexMappingSaved')
   })
 
   it('defaults to OpenAI and binds the new image provider to the image group', async () => {

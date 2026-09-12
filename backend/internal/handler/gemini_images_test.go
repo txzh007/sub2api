@@ -39,7 +39,6 @@ func newGeminiImagesTestHandler(t *testing.T, platform string, upstream func(*ht
 	}
 	account := &service.Account{ID: 9, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Purpose: service.AccountPurposeImageProvider, Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{42}, Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{
 		service.DefaultGeminiImageModel: service.DefaultGeminiImageModel,
-		"gpt-image-2":                   service.DefaultGeminiImageModel,
 	}}}
 	h, cleanup := newTestGatewayHandler(t, group, []*service.Account{account})
 	t.Cleanup(cleanup)
@@ -47,11 +46,23 @@ func newGeminiImagesTestHandler(t *testing.T, platform string, upstream func(*ht
 	h.geminiCompatService = service.NewGeminiMessagesCompatService(nil, nil, nil, nil, nil, nil, &geminiImagesTestUpstream{call: upstream}, nil, h.cfg)
 	key := &service.APIKey{ID: 7, UserID: 8, GroupID: &group.ID, Group: group, User: &service.User{ID: 8, Balance: 100}}
 	if platform == service.PlatformOpenAI {
-		h.apiKeyService = service.ProvideAPIKeyService(&bridgeAccountRepo{account: account}, nil, &bridgeUserRepo{user: key.User}, &bridgeGroupRepo{group: group}, &bridgeSubRepo{}, nil, nil, h.cfg, nil, nil)
+		settingService := service.NewSettingService(&bridgeSettingRepo{values: map[string]string{
+			service.SettingKeyCodexImageModelMapping: `{"builtin_model":"gpt-image-2","target_model":"gemini-3.1-flash-image"}`,
+		}}, h.cfg)
+		h.apiKeyService = service.ProvideAPIKeyService(&bridgeAccountRepo{account: account}, nil, &bridgeUserRepo{user: key.User}, &bridgeGroupRepo{group: group}, &bridgeSubRepo{}, nil, nil, h.cfg, nil, nil, settingService)
 		key.Group = &service.Group{ID: 5, Platform: service.PlatformOpenAI, Status: service.StatusActive, Hydrated: true}
 		key.GroupID = &key.Group.ID
 	}
 	return h, key
+}
+
+type bridgeSettingRepo struct {
+	service.SettingRepository
+	values map[string]string
+}
+
+func (r *bridgeSettingRepo) GetValue(_ context.Context, key string) (string, error) {
+	return r.values[key], nil
 }
 
 type bridgeAccountRepo struct {

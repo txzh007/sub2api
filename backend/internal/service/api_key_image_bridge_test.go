@@ -130,6 +130,31 @@ func TestAPIKeyImageBridgeEffectiveModelUsesSharedTriStateSemantics(t *testing.T
 	require.True(t, enabled)
 }
 
+func TestAPIKeyImageBridgeUsesSiteWideCodexAlias(t *testing.T) {
+	svc, _, user, _ := imageBridgeServiceFixture()
+	settings := NewSettingService(newMockSettingRepo(), &config.Config{})
+	require.NoError(t, settings.SetCodexImageModelMappingSettings(context.Background(), &CodexImageModelMappingSettings{
+		BuiltinModel: "gpt-image-2",
+		TargetModel:  "gemini-3.1-flash-image",
+	}))
+	svc.SetSettingService(settings)
+
+	model, enabled := svc.EffectiveImageBridgeModelForRequest(context.Background(), &APIKey{})
+	require.True(t, enabled)
+	require.Equal(t, "gpt-image-2", model)
+	require.Equal(t, "gemini-3.1-flash-image", svc.ResolveConfiguredImageBridgeModel(context.Background(), model))
+
+	models, err := svc.GetImageBridgeModels(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-image-2", models.DefaultModel)
+	require.Contains(t, models.Models, "gpt-image-2")
+
+	disabled := ""
+	model, enabled = svc.EffectiveImageBridgeModelForRequest(context.Background(), &APIKey{ImageBridgeModel: &disabled})
+	require.False(t, enabled)
+	require.Empty(t, model)
+}
+
 func TestAPIKeyImageBridgeAvailabilityExplainsPausedProvider(t *testing.T) {
 	svc, group, user, accounts := imageBridgeServiceFixture()
 	group.ModelAllowlist = GroupModelAllowlist{Enabled: true, Models: []string{"gemini-3.1-flash-image", "grok-imagine-image-2.0"}}

@@ -455,6 +455,11 @@ type OpenAIImagesOAuthUnavailableCooldownSettings struct {
 	CooldownMinutes int `json:"cooldown_minutes"`
 }
 
+type CodexImageModelMappingSettings struct {
+	BuiltinModel string `json:"builtin_model"`
+	TargetModel  string `json:"target_model"`
+}
+
 // PanelRateLimitSettings 面板 API 限流配置 DTO
 type PanelRateLimitSettings struct {
 	Enabled     bool `json:"enabled"`

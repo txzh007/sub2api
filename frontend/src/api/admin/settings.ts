@@ -1316,6 +1316,30 @@ export async function updateRateLimit429CooldownSettings(
   return data;
 }
 
+// ==================== Codex Image Model Mapping ====================
+
+export interface CodexImageModelMappingSettings {
+  builtin_model: string;
+  target_model: string;
+}
+
+export async function getCodexImageModelMappingSettings(): Promise<CodexImageModelMappingSettings> {
+  const { data } = await apiClient.get<CodexImageModelMappingSettings>(
+    "/admin/settings/codex-image-model-mapping",
+  );
+  return data;
+}
+
+export async function updateCodexImageModelMappingSettings(
+  settings: CodexImageModelMappingSettings,
+): Promise<CodexImageModelMappingSettings> {
+  const { data } = await apiClient.put<CodexImageModelMappingSettings>(
+    "/admin/settings/codex-image-model-mapping",
+    settings,
+  );
+  return data;
+}
+
 // ==================== Panel Rate Limit Settings ====================
 
 /**
@@ -1575,6 +1599,8 @@ export const settingsAPI = {
   updateOverloadCooldownSettings,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
+  getCodexImageModelMappingSettings,
+  updateCodexImageModelMappingSettings,
   getPanelRateLimitSettings,
   updatePanelRateLimitSettings,
   getStreamTimeoutSettings,

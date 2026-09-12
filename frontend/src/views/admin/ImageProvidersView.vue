@@ -14,6 +14,34 @@
           <span>{{ t('imageProviders.groupUnavailable') }}</span>
           <RouterLink to="/admin/groups" class="underline">{{ t('nav.groups') }}</RouterLink>
         </div>
+        <section class="mt-3 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-dark-600 dark:bg-dark-800/60">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-dark-100">{{ t('imageProviders.codexMappingTitle') }}</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.codexMappingHint') }}</p>
+            </div>
+            <button class="btn btn-primary" :disabled="codexMappingLoading || codexMappingSaving" @click="saveCodexMapping">
+              {{ codexMappingSaving ? t('common.saving') : t('imageProviders.codexMappingSave') }}
+            </button>
+          </div>
+          <div class="mt-4 grid gap-3 md:grid-cols-2">
+            <div>
+              <label for="codex-builtin-image-model" class="input-label">{{ t('imageProviders.codexBuiltinModel') }}</label>
+              <input id="codex-builtin-image-model" v-model="codexMapping.builtin_model" class="input font-mono" :disabled="codexMappingLoading" />
+            </div>
+            <div>
+              <label for="codex-upstream-image-model" class="input-label">{{ t('imageProviders.codexTargetModel') }}</label>
+              <input id="codex-upstream-image-model" v-model="codexMapping.target_model" class="input font-mono" list="codex-image-target-options" :disabled="codexMappingLoading" :placeholder="t('imageProviders.codexTargetPlaceholder')" />
+              <datalist id="codex-image-target-options">
+                <option v-for="model in codexTargetOptions" :key="model" :value="model" />
+              </datalist>
+            </div>
+          </div>
+          <p v-if="codexMapping.target_model.trim()" class="mt-3 break-all font-mono text-xs text-primary-700 dark:text-primary-300">
+            {{ codexMapping.builtin_model.trim() || '—' }} → {{ codexMapping.target_model.trim() }}
+          </p>
+          <p v-if="codexMappingError" role="alert" class="mt-3 text-sm text-red-600 dark:text-red-400">{{ codexMappingError }}</p>
+        </section>
       </template>
       <template #table>
         <DataTable :columns="columns" :data="accounts" :loading="loading">
@@ -201,6 +229,10 @@ const copying = ref(false)
 const copyCandidates = ref<AccountListItem[]>([])
 const copySourceID = ref<number | null>(null)
 const copyError = ref('')
+const codexMapping = ref({ builtin_model: 'gpt-image-2', target_model: '' })
+const codexMappingLoading = ref(false)
+const codexMappingSaving = ref(false)
+const codexMappingError = ref('')
 type ImageAccountPlatform = 'openai' | 'gemini' | 'grok'
 
 const emptyForm = () => ({ name: '', platform: 'openai' as ImageAccountPlatform, baseURL: '', apiKey: '', models: '', concurrency: 3 })
@@ -219,6 +251,7 @@ const visibleRemoteModels = computed(() => (remoteModels.value || []).filter(mod
 ))
 const selectedModelTargets = computed(() => new Set(modelLines().map(modelTarget)))
 const selectedModels = computed(() => [...new Set(modelLines())].map(line => ({ line, name: line.split('=')[0].trim(), target: modelTarget(line) })))
+const codexTargetOptions = computed(() => [...new Set(accounts.value.flatMap(modelNames))].sort())
 
 function modelLines() { return form.value.models.split('\n').map(line => line.trim()).filter(Boolean) }
 function modelTarget(line: string) { return line.includes('=') ? line.slice(line.indexOf('=') + 1).trim() : line }
@@ -320,6 +353,35 @@ async function load() {
     app.showError(message(error))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadCodexMapping() {
+  codexMappingLoading.value = true
+  codexMappingError.value = ''
+  try {
+    codexMapping.value = await adminAPI.settings.getCodexImageModelMappingSettings()
+  } catch (error) {
+    codexMappingError.value = message(error)
+  } finally {
+    codexMappingLoading.value = false
+  }
+}
+
+async function saveCodexMapping() {
+  if (codexMappingSaving.value) return
+  codexMappingSaving.value = true
+  codexMappingError.value = ''
+  try {
+    codexMapping.value = await adminAPI.settings.updateCodexImageModelMappingSettings({
+      builtin_model: codexMapping.value.builtin_model.trim(),
+      target_model: codexMapping.value.target_model.trim()
+    })
+    app.showSuccess(t('imageProviders.codexMappingSaved'))
+  } catch (error) {
+    codexMappingError.value = message(error)
+  } finally {
+    codexMappingSaving.value = false
   }
 }
 
@@ -500,5 +562,8 @@ async function confirmDelete() {
 }
 
 function changePage(value: number) { page.value = value; void load() }
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadCodexMapping()
+})
 </script>

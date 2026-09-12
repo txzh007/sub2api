@@ -28,20 +28,22 @@ func (h *GatewayHandler) resolveKeyImageBridge(c *gin.Context, key *service.APIK
 	if h.apiKeyService == nil {
 		return nil, fmt.Errorf("image bridge configuration service unavailable")
 	}
-	model = strings.TrimSpace(model)
-	imageKey, sub, err := h.apiKeyService.ImageBridgeAPIKey(c.Request.Context(), key, model)
+	publicModel := strings.TrimSpace(model)
+	upstreamModel := h.apiKeyService.ResolveConfiguredImageBridgeModel(c.Request.Context(), publicModel)
+	imageKey, sub, err := h.apiKeyService.ImageBridgeAPIKey(c.Request.Context(), key, upstreamModel)
 	if err != nil {
 		return nil, err
 	}
-	route := service.CompositeRouteDecision{Matched: true, GroupID: imageKey.Group.ID, PublicModel: model, UpstreamModel: model, TargetPlatform: imageKey.Group.Platform}
+	route := service.CompositeRouteDecision{Matched: true, GroupID: imageKey.Group.ID, PublicModel: publicModel, UpstreamModel: upstreamModel, TargetPlatform: imageKey.Group.Platform}
 	if imageKey.Group.Platform == service.PlatformComposite {
 		if resolver == nil {
 			resolver = service.NewCompositeRouteResolver(nil)
 		}
-		route, err = resolver.Resolve(c.Request.Context(), imageKey.Group.ID, model, service.CompositeRouteEndpointImages)
+		route, err = resolver.Resolve(c.Request.Context(), imageKey.Group.ID, upstreamModel, service.CompositeRouteEndpointImages)
 		if err != nil {
 			return nil, err
 		}
+		route.PublicModel = publicModel
 	}
 	if !route.Matched || (route.TargetPlatform != service.PlatformGemini && route.TargetPlatform != service.PlatformOpenAI && route.TargetPlatform != service.PlatformGrok) {
 		return nil, fmt.Errorf("所选生图模型没有可用的 Images 路由")
@@ -81,7 +83,7 @@ func (h *GatewayHandler) WrapKeyImageBridge(next gin.HandlerFunc, resolver *serv
 			next(c)
 			return
 		}
-		model, enabled := h.apiKeyService.EffectiveImageBridgeModel(key)
+		model, enabled := h.apiKeyService.EffectiveImageBridgeModelForRequest(c.Request.Context(), key)
 		if !enabled {
 			next(c)
 			return

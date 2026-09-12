@@ -181,6 +181,50 @@ func (h *SettingHandler) UpdateOpenAIImagesOAuthUnavailableCooldownSettings(c *g
 	response.Success(c, dto.OpenAIImagesOAuthUnavailableCooldownSettings{CooldownMinutes: settings.CooldownMinutes})
 }
 
+// GetCodexImageModelMappingSettings returns the single site-wide mapping used
+// by Codex's built-in image model.
+func (h *SettingHandler) GetCodexImageModelMappingSettings(c *gin.Context) {
+	settings, err := h.settingService.GetCodexImageModelMappingSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.CodexImageModelMappingSettings{
+		BuiltinModel: settings.BuiltinModel,
+		TargetModel:  settings.TargetModel,
+	})
+}
+
+type UpdateCodexImageModelMappingSettingsRequest struct {
+	BuiltinModel string `json:"builtin_model"`
+	TargetModel  string `json:"target_model"`
+}
+
+func (h *SettingHandler) UpdateCodexImageModelMappingSettings(c *gin.Context) {
+	var req UpdateCodexImageModelMappingSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	settings := &service.CodexImageModelMappingSettings{
+		BuiltinModel: req.BuiltinModel,
+		TargetModel:  req.TargetModel,
+	}
+	if err := h.settingService.SetCodexImageModelMappingSettings(c.Request.Context(), settings); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	updated, err := h.settingService.GetCodexImageModelMappingSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.CodexImageModelMappingSettings{
+		BuiltinModel: updated.BuiltinModel,
+		TargetModel:  updated.TargetModel,
+	})
+}
+
 // GetPanelRateLimitSettings 获取面板 API 限流配置
 // GET /api/v1/admin/settings/panel-rate-limit
 func (h *SettingHandler) GetPanelRateLimitSettings(c *gin.Context) {

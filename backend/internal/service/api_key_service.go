@@ -296,6 +296,7 @@ type APIKeyService struct {
 	cache                     APIKeyCache
 	rateLimitCacheInvalid     RateLimitCacheInvalidator // optional: invalidate Redis rate limit cache
 	concurrencyService        *ConcurrencyService
+	settingService            *SettingService
 	cfg                       *config.Config
 	authCacheL1               *ristretto.Cache
 	authNegativeCacheL1       *ristretto.Cache
@@ -372,6 +373,10 @@ func (s *APIKeyService) SetRateLimitCacheInvalidator(inv RateLimitCacheInvalidat
 
 func (s *APIKeyService) SetConcurrencyService(concurrencyService *ConcurrencyService) {
 	s.concurrencyService = concurrencyService
+}
+
+func (s *APIKeyService) SetSettingService(settingService *SettingService) {
+	s.settingService = settingService
 }
 
 func (s *APIKeyService) compileAPIKeyIPRules(apiKey *APIKey) {
@@ -509,7 +514,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 			if err := validateImageBridgePrimaryGroup(primaryGroup); err != nil {
 				return nil, err
 			}
-			if _, _, err := s.ResolveImageBridge(ctx, userID, model); err != nil {
+			if _, _, err := s.ResolveImageBridge(ctx, userID, s.ResolveConfiguredImageBridgeModel(ctx, model)); err != nil {
 				return nil, err
 			}
 		}
@@ -845,7 +850,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 				if err := validateImageBridgePrimaryGroup(apiKey.Group); err != nil {
 					return nil, err
 				}
-				if _, _, err := s.ResolveImageBridge(ctx, userID, model); err != nil {
+				if _, _, err := s.ResolveImageBridge(ctx, userID, s.ResolveConfiguredImageBridgeModel(ctx, model)); err != nil {
 					return nil, err
 				}
 			}

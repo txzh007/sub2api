@@ -72,6 +72,9 @@ func (h *GatewayHandler) GeminiImages(c *gin.Context) {
 		writeImageBridgeError(c, capture, err)
 		return
 	}
+	if publicModel, ok := service.RequestedPublicModelFromContext(c.Request.Context()); ok {
+		result.Model = publicModel
+	}
 	if id := capture.Header().Get("x-request-id"); id != "" {
 		c.Header("x-request-id", id)
 	}

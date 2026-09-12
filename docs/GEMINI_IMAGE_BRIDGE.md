@@ -20,7 +20,7 @@ TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 C
 - **不桥接**：该 Key 不执行这项内部工具桥接，Images 按主分组原有处理逻辑转发。
 - **跟随服务默认配置**：保留旧 Key 的全局配置和显式工具模型行为，见下文。
 
-推荐把 Codex 固定请求的 `gpt-image-2` 当作公开别名，在生图接口的模型映射中配置 `gpt-image-2=实际上游模型`，例如 `gpt-image-2=gemini-3.1-flash-image`。Key 选择 `gpt-image-2` 后，Codex 无需知道真实供应商或模型名；更换上游时只修改生图接口映射。也可以让 Key 直接选择具体图片模型，保留现有精确指定能力。
+后台「生图接口」顶部提供一份全站统一映射：`Codex 内置模型 → 生图分组模型`。默认内置模型为 `gpt-image-2`，目标可配置为 `gemini-3.1-flash-image` 等生图分组中已有的公开模型；留空关闭统一映射。各生图账号只维护自身支持的图片模型，不需要重复添加 `gpt-image-2` 别名。Key 也可以直接选择具体图片模型，保留现有精确指定能力。
 
 图片使用生图分组的账号、价格、用户分组倍率和订阅额度；文字使用主分组对应配置。二者仍计入同一 Key 的额度和用量。每次桥接都会重新检查生图分组权限和模型列表，禁用分组或撤销权限后不会继续使用旧授权。
 
@@ -29,6 +29,8 @@ TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 C
 ## 独立生图接口管理
 
 后台「生图接口」（`/admin/image-providers`）独立维护生图上游的名称、Base URL、API Key、模型映射、并发和启停状态，复用已有账号存储与调度，不额外增加数据库表。新增接口仅绑定“生图”分组。编辑时密钥留空保留原值，模型及地址可以单独调整。
+
+页面顶部的 Codex 模型映射通过 `GET/PUT /api/v1/admin/settings/codex-image-model-mapping` 保存到现有系统设置表，同样不增加数据库字段或迁移。它先把 Codex 内置模型解析为生图分组的公开模型，再由具体账号原有的 `model_mapping` 解析为实际上游模型。
 
 列表支持「停用」和「删除」。删除需确认，调用原有账号删除接口，删除对应账号及全部分组关联；它不只是从“生图”分组解绑。如果所选模型没有其他可用接口承接，原 Key 的生图调用将无法继续。临时暂停使用可选择停用。
 
@@ -84,7 +86,7 @@ curl "$SUB2API_BASE_URL/v1/images/edits" \
 
 ## Codex 原生本地文件与托管工具兼容
 
-推荐保留原来的 GPT 编程模型与主分组，直接为 Key 选择 Gemini 生图桥接模型，不需要修改全局配置或重启。
+推荐保留原来的 GPT 编程模型与主分组，在「生图接口」顶部统一配置 Codex 内置模型映射。设置保存到数据库后立即生效，不需要修改配置文件或重启。
 
 全局默认仅对选择「跟随服务默认配置」的 **OpenAI 分组 Key** 生效，图片同样从独立“生图”分组选择。在实际加载的配置中增加：
 
@@ -127,12 +129,12 @@ supports_websockets = false
 
 ## 后续升级 Sub2API
 
-二开代码保留在 `feat/gemini-image-bridge` 分支，起点为 `ab99d56e9`（仓库版本 `0.2.1`）。**升级方式是合并新版本源码、验证、重新构建自己的镜像或二进制。直接换回发布方镜像/二进制不会包含本功能。**
+二开代码保留在 `feature/codex-image-model-alias-setting` 分支。**升级方式是合并新版本源码、验证、重新构建自己的镜像或二进制。直接换回发布方镜像/二进制不会包含本功能。**
 
 先将本功能及后续修改提交到自己的仓库；不要长期仅保留工作区未提交差异。`upstream` 应指向当前这份代码实际跟随的发行来源：如果基于某个 Sub2API fork，先跟随该 fork，避免无意间切换产品分支。下面假设已配置该 remote，标签名需替换为实际目标版本：
 
 ```bash
-git switch feat/gemini-image-bridge
+git switch feature/codex-image-model-alias-setting
 git status --short
 # 确认修改已提交、工作区干净后，保存升级前分支
 git branch backup/gemini-before-upgrade
@@ -150,6 +152,7 @@ git merge <目标版本的标签或提交>
 | `backend/ent/schema/api_key.go`、迁移 `235_api_key_image_bridge_model.sql` | 可空的 `image_bridge_model` 字段；合并 schema 后重新生成 Ent 与 Wire。 |
 | `frontend/src/views/user/KeysView.vue`、`components/keys/ImageBridgeModelSelect.vue`、API、类型和翻译 | 创建、编辑选择器及已选模型显示。 |
 | `frontend/src/views/admin/ImageProvidersView.vue`、前端路由与侧栏 | 独立生图接口管理，默认 OpenAI 协议。 |
+| `backend/internal/service/setting_codex_image_model_mapping.go`、管理员设置路由、`ImageProvidersView.vue` | 全站统一的 Codex 内置模型到生图分组模型映射；复用系统设置表，无数据库迁移。 |
 | `backend/internal/service/openai_images.go` | OpenAI Images 校验允许 Gemini 等图片模型名。 |
 | `backend/internal/handler/gateway_handler.go` | 图片网关字段。 |
 | `backend/internal/config/config.go`、`deploy/config.example.yaml` | `codex_gemini_image_model` 配置及空默认值。 |

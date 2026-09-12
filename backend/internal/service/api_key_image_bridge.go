@@ -63,6 +63,38 @@ func (s *APIKeyService) EffectiveImageBridgeModel(key *APIKey) (string, bool) {
 	return model, model != ""
 }
 
+// EffectiveImageBridgeModelForRequest extends the legacy static default with
+// the DB-backed site-wide Codex alias. Explicit per-key disable/selection keeps
+// its existing precedence.
+func (s *APIKeyService) EffectiveImageBridgeModelForRequest(ctx context.Context, key *APIKey) (string, bool) {
+	if key == nil {
+		return "", false
+	}
+	if key.ImageBridgeModel != nil {
+		model := strings.TrimSpace(*key.ImageBridgeModel)
+		return model, model != ""
+	}
+	if s != nil && s.settingService != nil {
+		if settings, err := s.settingService.GetCodexImageModelMappingSettings(ctx); err == nil {
+			if settings.TargetModel != "" {
+				return settings.BuiltinModel, true
+			}
+			return "", false
+		}
+	}
+	return s.EffectiveImageBridgeModel(key)
+}
+
+// ResolveConfiguredImageBridgeModel applies the single site-wide Codex alias
+// before image-group availability and provider routing are evaluated.
+func (s *APIKeyService) ResolveConfiguredImageBridgeModel(ctx context.Context, model string) string {
+	model = strings.TrimSpace(model)
+	if s == nil || s.settingService == nil {
+		return model
+	}
+	return s.settingService.ResolveCodexImageModel(ctx, model)
+}
+
 // The image group remains the source of model availability, access and pricing.
 // Do not copy its account credentials or model list into each API key.
 func (s *APIKeyService) imageBridgeGroup(ctx context.Context, userID int64) (*Group, error) {
@@ -240,6 +272,26 @@ func (s *APIKeyService) GetImageBridgeModels(ctx context.Context, userID int64) 
 	if s.cfg != nil {
 		result.DefaultModel = strings.TrimSpace(s.cfg.Gateway.CodexGeminiImageModel)
 	}
+	if s.settingService != nil {
+		if settings, settingsErr := s.settingService.GetCodexImageModelMappingSettings(ctx); settingsErr == nil {
+			result.DefaultModel = ""
+			if settings.TargetModel != "" {
+				result.DefaultModel = settings.BuiltinModel
+				targetStatus := ImageBridgeModelAvailability{Model: settings.TargetModel, Reason: ImageBridgeUnavailableNoProvider}
+				for _, item := range availability {
+					if item.Model == settings.TargetModel {
+						targetStatus = item
+						break
+					}
+				}
+				if settings.BuiltinModel != settings.TargetModel {
+					aliasStatus := targetStatus
+					aliasStatus.Model = settings.BuiltinModel
+					result.Availability = append(result.Availability, aliasStatus)
+				}
+			}
+		}
+	}
 	if group != nil {
 		result.GroupID = group.ID
 		result.GroupName = group.Name
@@ -248,10 +300,28 @@ func (s *APIKeyService) GetImageBridgeModels(ctx context.Context, userID int64) 
 				result.Models = append(result.Models, item.Model)
 			}
 		}
+		if result.DefaultModel != "" {
+			for _, item := range result.Availability {
+				if item.Model == result.DefaultModel && item.Available && !containsString(result.Models, result.DefaultModel) {
+					result.Models = append(result.Models, result.DefaultModel)
+					sort.Strings(result.Models)
+					break
+				}
+			}
+		}
 	} else {
 		result.GroupUnavailable = true
 	}
 	return result, nil
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveImageBridge rechecks the image group's current access and subscription

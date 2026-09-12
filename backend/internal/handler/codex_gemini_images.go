@@ -35,7 +35,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			next(c)
 			return
 		}
-		model, bridgeEnabled := h.apiKeyService.EffectiveImageBridgeModel(key)
+		model, bridgeEnabled := h.apiKeyService.EffectiveImageBridgeModelForRequest(c.Request.Context(), key)
 		if !bridgeEnabled {
 			next(c)
 			return
