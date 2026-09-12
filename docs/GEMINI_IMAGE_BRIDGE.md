@@ -20,6 +20,8 @@ TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 C
 - **不桥接**：该 Key 不执行这项内部工具桥接，Images 按主分组原有处理逻辑转发。
 - **跟随服务默认配置**：保留旧 Key 的全局配置和显式工具模型行为，见下文。
 
+推荐把 Codex 固定请求的 `gpt-image-2` 当作公开别名，在生图接口的模型映射中配置 `gpt-image-2=实际上游模型`，例如 `gpt-image-2=gemini-3.1-flash-image`。Key 选择 `gpt-image-2` 后，Codex 无需知道真实供应商或模型名；更换上游时只修改生图接口映射。也可以让 Key 直接选择具体图片模型，保留现有精确指定能力。
+
 图片使用生图分组的账号、价格、用户分组倍率和订阅额度；文字使用主分组对应配置。二者仍计入同一 Key 的额度和用量。每次桥接都会重新检查生图分组权限和模型列表，禁用分组或撤销权限后不会继续使用旧授权。
 
 管理 API：`GET /api/v1/keys/image-bridge-models` 返回 `{group_id, group_name, models}`，创建与编辑 Key 的请求增加 `image_bridge_model`。模型字符串表示指定模型，`""` 表示不桥接，`null` 表示跟随默认；编辑时省略此字段保留原选择。新建页面默认不桥接，旧 Key 迁移后为 `null`。
@@ -109,7 +111,7 @@ env_key = "SUB2API_API_KEY"
 supports_websockets = false
 ```
 
-启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。新版 Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口替换为 Key 选择的图片模型。Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
+启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。新版 Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口先解析 Key 选择的公开别名，再通过生图接口原有的 `model_mapping` 得到实际上游模型。Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
 
 开启后的行为与边界：
 

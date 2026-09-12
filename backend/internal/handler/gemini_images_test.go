@@ -37,7 +37,10 @@ func newGeminiImagesTestHandler(t *testing.T, platform string, upstream func(*ht
 	if platform == service.PlatformOpenAI {
 		group.Platform = service.PlatformGemini
 	}
-	account := &service.Account{ID: 9, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Purpose: service.AccountPurposeImageProvider, Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{42}, Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{service.DefaultGeminiImageModel: service.DefaultGeminiImageModel}}}
+	account := &service.Account{ID: 9, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Purpose: service.AccountPurposeImageProvider, Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{42}, Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{
+		service.DefaultGeminiImageModel: service.DefaultGeminiImageModel,
+		"gpt-image-2":                   service.DefaultGeminiImageModel,
+	}}}
 	h, cleanup := newTestGatewayHandler(t, group, []*service.Account{account})
 	t.Cleanup(cleanup)
 	h.cfg = &config.Config{RunMode: config.RunModeSimple}
@@ -235,7 +238,10 @@ func TestCodexNativeImageToolImagesRequestUsesSelectedBridgeModel(t *testing.T) 
 		require.Equal(t, "draw a cat", gjson.GetBytes(body, "contents.0.parts.0.text").String())
 		return geminiTestImageResponse(), nil
 	})
-	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+	// Codex always requests its canonical image model. The key selects that
+	// public alias, while the provider's existing model_mapping resolves the
+	// actual upstream model.
+	key.ImageBridgeModel = stringPointer("gpt-image-2")
 
 	c, w := geminiImagesTestContext(key, "/v1/images/generations", `{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)
 	h.WrapKeyImageBridge(func(*gin.Context) {
@@ -244,7 +250,7 @@ func TestCodexNativeImageToolImagesRequestUsesSelectedBridgeModel(t *testing.T) 
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, "aW1hZ2U=", gjson.Get(w.Body.String(), "data.0.b64_json").String())
-	require.Equal(t, service.DefaultGeminiImageModel, gjson.Get(w.Body.String(), "model").String())
+	require.Equal(t, "gpt-image-2", gjson.Get(w.Body.String(), "model").String())
 }
 
 func TestGeminiImagesCodexForcedToolAndReferences(t *testing.T) {
