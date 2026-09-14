@@ -224,6 +224,7 @@ func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
 		require.False(t, gjson.GetBytes(body, "stream").Bool())
 		if textCalls == 1 {
 			require.Contains(t, string(body), geminiImageFunction)
+			require.NotContains(t, string(body), `"name":"image_gen"`)
 			c.JSON(200, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
 			return
 		}
@@ -231,7 +232,7 @@ func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
 		c.JSON(200, gin.H{"id": "resp_final", "object": "response", "status": "completed", "output": []any{gin.H{"id": "msg_final", "type": "message", "role": "assistant", "status": "completed", "content": []any{gin.H{"type": "output_text", "text": "图片已生成。", "annotations": []any{}}}}}})
 	}
 
-	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":"帮我生成个蓝色机器猫，2K","stream":true}`)
+	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":[{"role":"user","content":"帮我生成个蓝色机器猫，2K"},{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen"}]}],"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"stream":true}`)
 	c.Request.Header.Set("User-Agent", "codex_cli_rs")
 	c.Request.Header.Set("X-OpenAI-Internal-Codex-Responses-Lite", "true")
 	h.WrapGeminiImageResponses(text, service.NewCompositeRouteResolver(nil))(c)
@@ -271,9 +272,9 @@ func TestGeminiImagesCodexNativeImageToolPassesThroughForLocalFileDelivery(t *te
 	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
 
 	for _, body := range []string{
-		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`,
-		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"function","name":"image_gen.imagegen","parameters":{"type":"object"}}]}`,
-		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"additional_tools":[{"type":"function","name":"image_gen__imagegen","parameters":{"type":"object"}}]}`,
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"tool_choice":{"type":"namespace","name":"image_gen"}}`,
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"tools":[{"type":"function","name":"image_gen.imagegen","parameters":{"type":"object"}}],"tool_choice":{"type":"function","name":"image_gen.imagegen"}}`,
+		`{"model":"gpt-5.4","input":"draw a cat","stream":true,"additional_tools":[{"type":"function","name":"image_gen__imagegen","parameters":{"type":"object"}}],"tool_choice":{"type":"function","name":"image_gen__imagegen"}}`,
 	} {
 		c, w := geminiImagesTestContext(key, "/v1/responses", body)
 		c.Request.Header.Set("User-Agent", "codex_cli_rs")

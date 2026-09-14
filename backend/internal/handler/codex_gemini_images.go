@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -84,6 +85,12 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			return
 		}
 		if autoInjected {
+			slog.Info("codex_image_bridge.auto_injected",
+				"api_key_id", key.ID,
+				"text_model", requestModel,
+				"image_model", model,
+				"passive_image_tool_declared", hasCodexLocalImageTool(request),
+			)
 			tool = map[string]any{"type": "image_generation"}
 		}
 		// Resolve the independent image upstream only when the text model calls
@@ -124,7 +131,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 // deliberately limited to explicit image creation/editing prompts so ordinary
 // Codex traffic keeps its native streaming path.
 func shouldAutoInjectGeminiImageTool(c *gin.Context, request map[string]any) bool {
-	if c == nil || request == nil || hasCodexLocalImageTool(request) {
+	if c == nil || request == nil || codexLocalImageToolChoiceForced(request) {
 		return false
 	}
 	userAgent := strings.ToLower(c.GetHeader("User-Agent"))
@@ -136,16 +143,62 @@ func shouldAutoInjectGeminiImageTool(c *gin.Context, request map[string]any) boo
 	return hasExplicitImageGenerationPrompt(prompt)
 }
 
+// codexLocalImageToolChoiceForced distinguishes an explicit client decision to
+// execute the local image tool from Codex's passive image_gen advertisement.
+// New Codex builds advertise the namespace on ordinary requests even when the
+// current host cannot execute it, so declarations alone cannot suppress the
+// server-hosted fallback.
+func codexLocalImageToolChoiceForced(request map[string]any) bool {
+	var selected func(any) bool
+	selected = func(raw any) bool {
+		switch value := raw.(type) {
+		case string:
+			return isCodexLocalImageToolName(value)
+		case map[string]any:
+			toolType := strings.TrimSpace(fmt.Sprint(value["type"]))
+			name := strings.TrimSpace(fmt.Sprint(value["name"]))
+			namespace := strings.TrimSpace(fmt.Sprint(value["namespace"]))
+			if toolType == "namespace" && name == "image_gen" {
+				return true
+			}
+			if namespace == "image_gen" && (name == "" || name == "imagegen") {
+				return true
+			}
+			if isCodexLocalImageToolName(name) {
+				return true
+			}
+			return selected(value["tool"]) || selected(value["function"])
+		default:
+			return false
+		}
+	}
+	return selected(request["tool_choice"])
+}
+
+func isCodexLocalImageToolName(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "image_gen", "image_gen.imagegen", "image_gen__imagegen":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCodexLocalImageTool(raw any) bool {
+	tool, _ := raw.(map[string]any)
+	toolType := strings.TrimSpace(fmt.Sprint(tool["type"]))
+	name := strings.TrimSpace(fmt.Sprint(tool["name"]))
+	if toolType == "namespace" && name == "image_gen" {
+		return true
+	}
+	return isCodexLocalImageToolName(name)
+}
+
 func hasCodexLocalImageTool(request map[string]any) bool {
 	containsLocalTool := func(rawTools any) bool {
 		tools, _ := rawTools.([]any)
 		for _, raw := range tools {
-			tool, _ := raw.(map[string]any)
-			toolType, _ := tool["type"].(string)
-			name, _ := tool["name"].(string)
-			name = strings.TrimSpace(name)
-			if (strings.TrimSpace(toolType) == "namespace" && name == "image_gen") ||
-				name == "image_gen" || name == "image_gen.imagegen" || name == "image_gen__imagegen" {
+			if isCodexLocalImageTool(raw) {
 				return true
 			}
 		}
@@ -277,7 +330,7 @@ func prepareGeminiImageFunctionRequest(request map[string]any, referenceCount in
 		items, _ := request[field].([]any)
 		filtered := make([]any, 0, len(items))
 		for _, item := range items {
-			if !isBridgeImageTool(item) {
+			if !isBridgeImageTool(item) && !isCodexLocalImageTool(item) {
 				filtered = append(filtered, item)
 			}
 		}
@@ -289,6 +342,7 @@ func prepareGeminiImageFunctionRequest(request map[string]any, referenceCount in
 			delete(request, field)
 		}
 	}
+	stripCodexLocalImageToolInputDeclarations(request)
 	tools = append(tools, map[string]any{
 		"type": "function", "name": geminiImageFunction, "strict": false,
 		"description": fmt.Sprintf("Generate or edit a raster image using the configured image model. This replaces image_gen.imagegen and image_generation for this request. Call only when the user requests image generation or editing. Supply a complete image prompt. There are %d reference images in conversation order; select their zero-based indices for edits. The gateway executes this tool and returns the actual image to the client.", referenceCount),
@@ -300,6 +354,38 @@ func prepareGeminiImageFunctionRequest(request map[string]any, referenceCount in
 	request["tools"] = tools
 	request["stream"] = false
 	request["parallel_tool_calls"] = false
+}
+
+func stripCodexLocalImageToolInputDeclarations(request map[string]any) {
+	input, ok := request["input"].([]any)
+	if !ok {
+		return
+	}
+	filteredInput := make([]any, 0, len(input))
+	for _, raw := range input {
+		item, _ := raw.(map[string]any)
+		if strings.TrimSpace(fmt.Sprint(item["type"])) != "additional_tools" {
+			filteredInput = append(filteredInput, raw)
+			continue
+		}
+		rawTools, _ := item["tools"].([]any)
+		filteredTools := make([]any, 0, len(rawTools))
+		for _, tool := range rawTools {
+			if !isCodexLocalImageTool(tool) {
+				filteredTools = append(filteredTools, tool)
+			}
+		}
+		if len(filteredTools) == 0 {
+			continue
+		}
+		copyItem := make(map[string]any, len(item))
+		for key, value := range item {
+			copyItem[key] = value
+		}
+		copyItem["tools"] = filteredTools
+		filteredInput = append(filteredInput, copyItem)
+	}
+	request["input"] = filteredInput
 }
 
 // Generated images belong to this gateway, so an OpenAI account cannot look
