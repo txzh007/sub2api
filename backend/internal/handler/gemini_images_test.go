@@ -211,6 +211,58 @@ func TestGeminiImagesCodexHostedTool(t *testing.T) {
 	}
 }
 
+func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
+	imageCalls, textCalls := 0, 0
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		imageCalls++
+		return geminiTestImageResponse(), nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+	text := func(c *gin.Context) {
+		textCalls++
+		body, _ := io.ReadAll(c.Request.Body)
+		require.False(t, gjson.GetBytes(body, "stream").Bool())
+		if textCalls == 1 {
+			require.Contains(t, string(body), geminiImageFunction)
+			c.JSON(200, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
+			return
+		}
+		require.Contains(t, string(body), `"type":"function_call_output"`)
+		c.JSON(200, gin.H{"id": "resp_final", "object": "response", "status": "completed", "output": []any{gin.H{"id": "msg_final", "type": "message", "role": "assistant", "status": "completed", "content": []any{gin.H{"type": "output_text", "text": "图片已生成。", "annotations": []any{}}}}}})
+	}
+
+	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":"帮我生成个蓝色机器猫，2K","stream":true}`)
+	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	c.Request.Header.Set("X-OpenAI-Internal-Codex-Responses-Lite", "true")
+	h.WrapGeminiImageResponses(text, service.NewCompositeRouteResolver(nil))(c)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, 1, imageCalls)
+	require.Equal(t, 2, textCalls)
+	require.Contains(t, w.Body.String(), "response.image_generation_call.completed")
+	require.Contains(t, w.Body.String(), `"result":"aW1hZ2U="`)
+}
+
+func TestGeminiImagesCodexAutoInjectionIntentClassification(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		prompt string
+		want   bool
+	}{
+		{name: "Chinese generation", prompt: "请生成一张太空城市图片", want: true},
+		{name: "Chinese short command", prompt: "生图", want: true},
+		{name: "English generation", prompt: "Generate an image of a moon base", want: true},
+		{name: "explicit skill command", prompt: "$imagegen: watercolor fox", want: true},
+		{name: "ordinary coding", prompt: "修复登录页面的空指针问题", want: false},
+		{name: "image troubleshooting", prompt: "为什么当前环境无法生成图片", want: false},
+		{name: "bridge question", prompt: "现在的生图桥接模式是如何实现的", want: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, hasExplicitImageGenerationPrompt(tt.prompt))
+		})
+	}
+}
+
 func TestGeminiImagesCodexNativeImageToolPassesThroughForLocalFileDelivery(t *testing.T) {
 	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
 		t.Fatal("the Responses bridge must not execute Codex's local image tool")

@@ -4,7 +4,7 @@ export default {
     description: 'Manage independent image upstream URLs, credentials and models',
     hint: 'Providers belong to the “生图” group for OpenAI key bridging. Clients use the OpenAI Images API.',
     codexMappingTitle: 'Codex built-in image model mapping',
-    codexMappingHint: 'Configure once for the whole site. Codex requests for its built-in model are mapped to an existing image-group model; provider accounts do not need to repeat the alias.',
+    codexMappingHint: 'Configure once for the whole site. When Codex has no local image tool, explicit create or edit prompts automatically use the bridge and map to an image-group model; ordinary conversations keep their normal streaming path.',
     codexBuiltinModel: 'Codex built-in model',
     codexTargetModel: 'Map to upstream model',
     codexTargetPlaceholder: 'Leave empty to disable the global mapping',

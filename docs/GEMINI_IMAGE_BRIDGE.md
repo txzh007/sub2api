@@ -117,6 +117,7 @@ supports_websockets = false
 
 开启后的行为与边界：
 
+- Codex 客户端没有声明本地 `image_gen` 时，明确的生成图片、绘图或改图指令会自动注入托管桥接；普通文字请求和生图能力排障问题不会进入聚合链路，继续保持原有流式响应。HTTP Responses Lite 同样支持该自动回退。
 - Codex 原生 `image_gen` namespace、扁平 `image_gen.imagegen` 和兼容名称 `image_gen__imagegen` 均原样透传；网关不会将它们改成 `image_generation_call`。
 - Codex 客户端负责执行原生工具、读取参考图片和保存成图；TToken 只处理它随后发出的 Images 请求。会话中的预览与工具结果完全沿用 Codex 原生行为，不再由网关额外合成一份 `image_generation_call`。
 - Images 请求到达 TToken 后，才检查生图分组、模型和接口可用性，并使用图片分组独立计费；生图接口不可用不会阻止普通文字请求。

@@ -4,7 +4,7 @@ export default {
     description: '独立管理生图上游地址、密钥和模型',
     hint: '接口绑定到“生图”分组，供 OpenAI 密钥桥接使用。客户端统一使用 OpenAI Images 协议。',
     codexMappingTitle: 'Codex 内置生图模型映射',
-    codexMappingHint: '全站只配置一次。Codex 请求内置模型时，统一映射到“生图”分组中已有的图片模型；各账号无需重复配置该别名。',
+    codexMappingHint: '全站只配置一次。Codex 没有加载本地生图工具时，明确的生图或改图指令会自动注入桥接，并统一映射到“生图”分组中的图片模型；普通对话保持原有流式响应。',
     codexBuiltinModel: 'Codex 内置模型',
     codexTargetModel: '映射到上游模型',
     codexTargetPlaceholder: '留空表示关闭统一映射',

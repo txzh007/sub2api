@@ -58,6 +58,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		tool, hasTool := findGeminiBridgeImageTool(request)
 		requestModel, _ := request["model"].(string)
 		directImage := service.IsImageProviderModel(requestModel)
+		autoInjected := !hasTool && !directImage && shouldAutoInjectGeminiImageTool(c, request)
 		// A configured bridge must not turn every Codex Responses request into a
 		// buffered hosted-tool workflow. In particular, image_gen is a local Codex
 		// extension: Codex calls the active provider's Images API and then persists
@@ -69,7 +70,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			next(c)
 			return
 		}
-		if !hasTool && !directImage {
+		if !hasTool && !directImage && !autoInjected {
 			if normalizeGeminiImageHistory(request) {
 				normalizedBody, marshalErr := json.Marshal(request)
 				if marshalErr != nil {
@@ -81,6 +82,9 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			}
 			next(c)
 			return
+		}
+		if autoInjected {
+			tool = map[string]any{"type": "image_generation"}
 		}
 		// Resolve the independent image upstream only when the text model calls
 		// the tool. An unavailable image provider must not block ordinary text.
@@ -113,6 +117,94 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		}
 		writeImageBridgeResponses(c, response)
 	}
+}
+
+// shouldAutoInjectGeminiImageTool restores the server-hosted image bridge for
+// Codex installations that do not have the local image_gen extension. It is
+// deliberately limited to explicit image creation/editing prompts so ordinary
+// Codex traffic keeps its native streaming path.
+func shouldAutoInjectGeminiImageTool(c *gin.Context, request map[string]any) bool {
+	if c == nil || request == nil || hasCodexLocalImageTool(request) {
+		return false
+	}
+	userAgent := strings.ToLower(c.GetHeader("User-Agent"))
+	originator := strings.ToLower(c.GetHeader("originator"))
+	if !strings.Contains(userAgent, "codex") && !strings.Contains(originator, "codex") {
+		return false
+	}
+	prompt, _ := imageBridgeInput(request)
+	return hasExplicitImageGenerationPrompt(prompt)
+}
+
+func hasCodexLocalImageTool(request map[string]any) bool {
+	containsLocalTool := func(rawTools any) bool {
+		tools, _ := rawTools.([]any)
+		for _, raw := range tools {
+			tool, _ := raw.(map[string]any)
+			toolType, _ := tool["type"].(string)
+			name, _ := tool["name"].(string)
+			name = strings.TrimSpace(name)
+			if (strings.TrimSpace(toolType) == "namespace" && name == "image_gen") ||
+				name == "image_gen" || name == "image_gen.imagegen" || name == "image_gen__imagegen" {
+				return true
+			}
+		}
+		return false
+	}
+	if containsLocalTool(request["tools"]) || containsLocalTool(request["additional_tools"]) {
+		return true
+	}
+	input, _ := request["input"].([]any)
+	for _, raw := range input {
+		item, _ := raw.(map[string]any)
+		if strings.TrimSpace(fmt.Sprint(item["type"])) == "additional_tools" && containsLocalTool(item["tools"]) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasExplicitImageGenerationPrompt(prompt string) bool {
+	prompt = strings.ToLower(strings.TrimSpace(prompt))
+	if prompt == "" {
+		return false
+	}
+
+	for _, prefix := range []string{"$imagegen", "/imagegen"} {
+		if prompt == prefix || strings.HasPrefix(prompt, prefix+" ") || strings.HasPrefix(prompt, prefix+"：") || strings.HasPrefix(prompt, prefix+":") {
+			return true
+		}
+	}
+	for _, prefix := range []string{
+		"为什么", "为何", "怎么", "如何", "是否", "是不是", "什么", "哪个", "哪种", "有没有",
+		"why ", "how ", "what ", "which ", "does ", "do ", "is ", "are ",
+	} {
+		if strings.HasPrefix(prompt, prefix) {
+			return false
+		}
+	}
+	for _, failure := range []string{"无法生成图片", "不能生成图片", "生图失败", "生成图片失败", "image generation failed", "cannot generate images", "can't generate images"} {
+		if strings.Contains(prompt, failure) {
+			return false
+		}
+	}
+
+	for _, phrase := range []string{
+		"帮我生成", "请生成", "给我生成", "为我生成", "替我生成",
+		"生成一张", "生成一幅", "生成一个", "生成个", "生成图片", "生成图像", "生成照片", "生成海报", "生成头像", "生成壁纸",
+		"帮我画", "请画", "给我画", "为我画", "画一张", "画一幅", "画一个", "画个",
+		"绘制一张", "绘制一幅", "绘制一个", "绘制图片", "制作一张", "制作一个", "制作图片",
+		"做一张图", "做张图", "出一张图", "出张图", "帮我生图", "请生图", "直接生图", "开始生图",
+		"编辑这张图", "编辑图片", "修改这张图", "修改图片", "改这张图", "重绘这张图", "扩展这张图", "扩图", "抠图", "去掉背景", "移除背景", "替换背景", "换个背景",
+		"generate an image", "generate a picture", "generate image", "generate picture", "create an image", "create a picture", "create image", "create picture",
+		"draw me", "draw a", "draw an", "make me an image", "make an image", "make a picture", "render an image", "render a picture",
+		"edit this image", "edit the image", "modify this image", "remove the background", "replace the background", "can you generate", "could you generate",
+	} {
+		if strings.Contains(prompt, phrase) {
+			return true
+		}
+	}
+	return prompt == "生图" || prompt == "画图" || prompt == "生成图"
 }
 
 func findGeminiBridgeImageTool(request map[string]any) (map[string]any, bool) {
