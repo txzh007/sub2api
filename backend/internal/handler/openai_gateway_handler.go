@@ -18,6 +18,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
@@ -47,6 +48,27 @@ type OpenAIGatewayHandler struct {
 	imageLimiter               *imageConcurrencyLimiter
 	maxAccountSwitches         int
 	cfg                        *config.Config
+	responsesWSImageBridge     func(c *gin.Context, payload []byte) (normalized []byte, response map[string]any, capture *imageBridgeCapture, handled bool, err error)
+}
+
+// SetResponsesWebSocketImageBridge attaches the same server-hosted image bridge
+// used by POST /responses to the first response.create frame of WebSocket
+// ingress. Ordinary turns remain on the native WebSocket forwarding path.
+func (h *OpenAIGatewayHandler) SetResponsesWebSocketImageBridge(
+	bridge *GatewayHandler,
+	resolver *service.CompositeRouteResolver,
+	next gin.HandlerFunc,
+) {
+	if h == nil {
+		return
+	}
+	if bridge == nil || next == nil {
+		h.responsesWSImageBridge = nil
+		return
+	}
+	h.responsesWSImageBridge = func(c *gin.Context, payload []byte) ([]byte, map[string]any, *imageBridgeCapture, bool, error) {
+		return bridge.tryGeminiImageResponsesWebSocket(c, payload, resolver, next)
+	}
 }
 
 type openAIWSTurnChannelMappingSnapshot struct {
@@ -2407,6 +2429,28 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
+	if h.responsesWSImageBridge != nil {
+		normalized, response, capture, handled, bridgeErr := h.responsesWSImageBridge(c, firstMessage)
+		if len(normalized) > 0 {
+			firstMessage = normalized
+		}
+		if handled {
+			if bridgeErr != nil {
+				writeImageBridgeWebSocketError(ctx, wsConn, capture, bridgeErr)
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "image generation failed")
+				return
+			}
+			if err := writeImageBridgeWebSocketResponses(ctx, wsConn, response, h.responsesWSWriteTimeout()); err != nil {
+				reqLog.Warn("openai.websocket_image_bridge_write_failed", zap.Error(err))
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to write image response")
+				return
+			}
+			reqLog.Info("openai.websocket_image_bridge_completed", zap.String("model", reqModel))
+			closeOpenAIClientWS(wsConn, coderws.StatusNormalClosure, "image response completed")
+			return
+		}
+	}
+
 	imageIntent := service.IsExplicitImageGenerationIntent("/v1/responses", reqModel, firstMessage)
 	if imageIntent && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
@@ -3820,6 +3864,60 @@ func writeContentModerationWSError(ctx context.Context, conn *coderws.Conn, deci
 	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_ = conn.Write(writeCtx, coderws.MessageText, payload)
+}
+
+func writeImageBridgeWebSocketError(ctx context.Context, conn *coderws.Conn, capture *imageBridgeCapture, bridgeErr error) {
+	if conn == nil || bridgeErr == nil {
+		return
+	}
+	status := http.StatusBadGateway
+	typ := "upstream_error"
+	message := bridgeErr.Error()
+	if code := infraerrors.Code(bridgeErr); code >= 400 && code < 500 {
+		status = code
+		typ = "invalid_request_error"
+		message = infraerrors.Message(bridgeErr)
+		if code == http.StatusForbidden {
+			typ = "permission_error"
+		}
+	}
+	if capture != nil && capture.Status() >= 400 {
+		status = capture.Status()
+		if upstreamMessage := gjson.GetBytes(capture.body.Bytes(), "error.message").String(); upstreamMessage != "" {
+			message = upstreamMessage
+		}
+		if upstreamType := gjson.GetBytes(capture.body.Bytes(), "error.type").String(); upstreamType != "" {
+			typ = upstreamType
+		}
+		if status == http.StatusBadRequest {
+			typ = "invalid_request_error"
+		}
+	}
+	payload, marshalErr := json.Marshal(gin.H{
+		"type":        "error",
+		"status_code": status,
+		"error": gin.H{
+			"type":    typ,
+			"code":    typ,
+			"message": message,
+		},
+	})
+	if marshalErr != nil {
+		payload = []byte(`{"type":"error","status_code":502,"error":{"type":"upstream_error","code":"upstream_error","message":"image generation failed"}}`)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_ = conn.Write(writeCtx, coderws.MessageText, payload)
+}
+
+func (h *OpenAIGatewayHandler) responsesWSWriteTimeout() time.Duration {
+	if h != nil && h.cfg != nil && h.cfg.Gateway.OpenAIWS.WriteTimeoutSeconds > 0 {
+		return time.Duration(h.cfg.Gateway.OpenAIWS.WriteTimeoutSeconds) * time.Second
+	}
+	return 2 * time.Minute
 }
 
 // writeCyberSessionBlockedWSError sends an error frame telling the client this

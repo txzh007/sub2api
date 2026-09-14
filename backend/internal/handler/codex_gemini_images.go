@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	middleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -134,6 +136,99 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		}
 		writeImageBridgeResponses(c, response)
 	}
+}
+
+// tryGeminiImageResponsesWebSocket applies the HTTP Responses image bridge to
+// a response.create WebSocket frame. It only handles explicit image turns;
+// ordinary turns are returned (optionally normalized) to the native WS path.
+func (h *GatewayHandler) tryGeminiImageResponsesWebSocket(
+	c *gin.Context,
+	payload []byte,
+	resolver *service.CompositeRouteResolver,
+	next gin.HandlerFunc,
+) ([]byte, map[string]any, *imageBridgeCapture, bool, error) {
+	normalized := append([]byte(nil), payload...)
+	if h == nil || h.apiKeyService == nil || c == nil || next == nil {
+		return normalized, nil, nil, false, nil
+	}
+	key, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || !service.KeySupportsImageBridge(key) {
+		return normalized, nil, nil, false, nil
+	}
+	model, bridgeEnabled := h.apiKeyService.EffectiveImageBridgeModelForRequest(c.Request.Context(), key)
+	if !bridgeEnabled || strings.TrimSpace(model) == "" {
+		return normalized, nil, nil, false, nil
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(payload, &envelope); err != nil || envelope == nil {
+		return normalized, nil, nil, false, nil
+	}
+	eventType := strings.TrimSpace(fmt.Sprint(envelope["type"]))
+	if eventType != "" && eventType != "response.create" {
+		return normalized, nil, nil, false, nil
+	}
+	tool, hasTool := findGeminiBridgeImageTool(envelope)
+	requestModel, _ := envelope["model"].(string)
+	directImage := service.IsImageProviderModel(requestModel)
+	codexRequest := isCodexImageBridgeRequest(c)
+	autoInjected := !directImage && shouldAutoInjectGeminiImageTool(c, envelope)
+	passiveHostedTool := hasTool && codexRequest && !imageToolChoiceForced(envelope)
+
+	if !directImage && !autoInjected && (!hasTool || passiveHostedTool) {
+		changed := false
+		if passiveHostedTool {
+			changed = stripPassiveCodexHostedImageTools(envelope)
+		}
+		if normalizeGeminiImageHistory(envelope) {
+			changed = true
+		}
+		if !changed {
+			return normalized, nil, nil, false, nil
+		}
+		body, err := json.Marshal(envelope)
+		if err != nil {
+			return normalized, nil, nil, false, err
+		}
+		return body, nil, nil, false, nil
+	}
+
+	request := make(map[string]any, len(envelope))
+	for key, value := range envelope {
+		request[key] = value
+	}
+	delete(request, "type")
+	delete(request, "generate")
+	request["stream"] = false
+	if request["background"] == true {
+		return normalized, nil, nil, true, fmt.Errorf("Gemini image bridge does not support background Responses")
+	}
+	if previous, _ := request["previous_response_id"].(string); strings.TrimSpace(previous) != "" {
+		return normalized, nil, nil, true, fmt.Errorf("Gemini image bridge requires full conversation input; previous_response_id is not supported")
+	}
+	if autoInjected {
+		slog.Info("codex_image_bridge.websocket_auto_injected",
+			"api_key_id", key.ID,
+			"text_model", requestModel,
+			"image_model", model,
+			"passive_image_tool_declared", hasCodexLocalImageTool(envelope),
+			"passive_hosted_tool_declared", passiveHostedTool,
+		)
+		tool = map[string]any{"type": "image_generation"}
+	}
+
+	bridgeContext := c.Copy()
+	bridgeContext.Request = c.Request.Clone(c.Request.Context())
+	bridgeContext.Request.Method = http.MethodPost
+	bridgeContext.Request.URL.Path = "/v1/responses"
+	bridgeContext.Request.URL.RawPath = ""
+	bridgeContext.Set(imageBridgeResolverKey, resolver)
+	decision := service.CompositeRouteDecision{PublicModel: model, UpstreamModel: model}
+	response, capture, err := h.runGeminiImageResponses(bridgeContext, request, tool, decision, next)
+	for key, value := range bridgeContext.Keys {
+		c.Set(key, value)
+	}
+	return normalized, response, capture, true, err
 }
 
 // shouldAutoInjectGeminiImageTool restores the server-hosted image bridge for
@@ -815,11 +910,25 @@ func writeImageBridgeResponses(c *gin.Context, response map[string]any) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("X-Accel-Buffering", "no")
+	_ = emitImageBridgeResponseEvents(response, func(event map[string]any) error {
+		writeImageBridgeSSE(c, event)
+		return nil
+	})
+}
+
+func emitImageBridgeResponseEvents(response map[string]any, emitEvent func(map[string]any) error) error {
+	if emitEvent == nil {
+		return errors.New("image bridge event writer is nil")
+	}
 	sequence := 0
+	var firstErr error
 	emit := func(event map[string]any) {
+		if firstErr != nil {
+			return
+		}
 		event["sequence_number"] = sequence
 		sequence++
-		writeImageBridgeSSE(c, event)
+		firstErr = emitEvent(event)
 	}
 	created := map[string]any{}
 	for key, value := range response {
@@ -893,4 +1002,26 @@ func writeImageBridgeResponses(c *gin.Context, response map[string]any) {
 		terminal = "response.failed"
 	}
 	emit(map[string]any{"type": terminal, "response": response})
+	return firstErr
+}
+
+func writeImageBridgeWebSocketResponses(ctx context.Context, conn *coderws.Conn, response map[string]any, timeout time.Duration) error {
+	if conn == nil {
+		return errors.New("image bridge websocket is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Minute
+	}
+	return emitImageBridgeResponseEvents(response, func(event map[string]any) error {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		writeCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return conn.Write(writeCtx, coderws.MessageText, payload)
+	})
 }

@@ -189,15 +189,19 @@ func RegisterGatewayRoutes(
 		}
 	}
 
-	responsesHandler := gin.HandlerFunc(func(c *gin.Context) {
+	baseResponsesHandler := gin.HandlerFunc(func(c *gin.Context) {
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 			h.OpenAIGateway.Responses(c)
 			return
 		}
 		h.Gateway.Responses(c)
 	})
+	responsesHandler := baseResponsesHandler
 	if h.Gateway != nil {
 		responsesHandler = h.Gateway.WrapGeminiImageResponses(responsesHandler, compositeResolver)
+	}
+	if h.OpenAIGateway != nil {
+		h.OpenAIGateway.SetResponsesWebSocketImageBridge(h.Gateway, compositeResolver, baseResponsesHandler)
 	}
 
 	// API网关（Claude API兼容）

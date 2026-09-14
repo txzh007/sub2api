@@ -99,7 +99,7 @@ gateway:
 
 配置为空且 Key 没有指定模型时，不自动改写 Images 或普通 Codex 请求，原有 `codex_image_generation_bridge_enabled` 逻辑保持原样。OpenAI Key 显式传入 `tools: [{"type":"image_generation","model":"gemini-..."}]` 仍可从“生图”分组选择 Gemini 模型；这是本网关对 OpenAI 工具参数的扩展。非 OpenAI 分组的 Responses 按原有协议处理。
 
-这版桥接覆盖 POST `/v1/responses`、`/responses`、`/backend-api/codex/responses`。客户端需使用 HTTP Responses；例如在用户级 Codex 配置中为自定义 provider 设置：
+这版桥接覆盖 POST `/v1/responses`、`/responses`、`/backend-api/codex/responses`，以及这些入口的 Responses WebSocket。WebSocket 连接的首个 `response.create` 如果是明确生图请求，会由桥接返回标准图片工具事件；普通请求继续走原生 WebSocket，不会进入聚合链路。用户级 Codex 自定义 provider 可以保留 WebSocket：
 
 ```toml
 model = "gpt-5.4"
@@ -110,7 +110,7 @@ name = "Sub2API"
 base_url = "https://你的网关地址/v1"
 wire_api = "responses"
 env_key = "SUB2API_API_KEY"
-supports_websockets = false
+supports_websockets = true
 ```
 
 启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。新版 Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口先解析 Key 选择的公开别名，再通过生图接口原有的 `model_mapping` 得到实际上游模型。Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
@@ -118,12 +118,13 @@ supports_websockets = false
 开启后的行为与边界：
 
 - Codex 客户端没有声明本地 `image_gen` 时，明确的生成图片、绘图或改图指令会自动注入托管桥接；普通文字请求和生图能力排障问题不会进入聚合链路，继续保持原有流式响应。HTTP Responses Lite 同样支持该自动回退。
+- Codex 通过 Responses WebSocket 发起新会话时，首个明确生图的 `response.create` 同样会自动注入；结果以 `response.image_generation_call.*` 和 `response.completed` 帧返回。完成后网关正常关闭这条图片连接，后续请求由客户端重新连接。
 - Codex 原生 `image_gen` namespace、扁平 `image_gen.imagegen` 和兼容名称 `image_gen__imagegen` 均原样透传；网关不会将它们改成 `image_generation_call`。
 - Codex 客户端负责执行原生工具、读取参考图片和保存成图；TToken 只处理它随后发出的 Images 请求。会话中的预览与工具结果完全沿用 Codex 原生行为，不再由网关额外合成一份 `image_generation_call`。
 - Images 请求到达 TToken 后，才检查生图分组、模型和接口可用性，并使用图片分组独立计费；生图接口不可用不会阻止普通文字请求。
 - Responses 原生 `image_generation` 仍使用服务端兼容回退。该链路返回协议规定的 Base64 `image_generation_call`，适用于没有 Codex 本地图片扩展的客户端，但不会产生本地文件。
 - 托管兼容链路通常消耗一次文本决策请求、一次生图请求、一次文本续写请求；各调用使用独立计费请求 ID。文本续写失败时仍交付已生成图片。
-- 只有托管兼容链路需要聚合内部请求，并受 `previous_response_id`、`background:true` 和 WebSocket 等限制；Codex 原生工具走普通 Responses 工具循环，不受这组桥接限制。
+- 只有托管兼容链路需要聚合内部请求，并受 `previous_response_id`、`background:true` 限制；WebSocket 当前只在每条连接的首个 `response.create` 执行托管桥接。Codex 原生工具走普通 Responses 工具循环，不受这组桥接限制。
 - 本地文件参考图由 Codex 原生工具读取并上传，远程 TToken 不直接读取提示词中的本地路径。
 
 协议参考：[OpenAI 图片工具](https://platform.openai.com/docs/guides/tools-image-generation)、[Gemini 图片生成](https://ai.google.dev/gemini-api/docs/image-generation)、[Codex 图片工具实现](https://github.com/openai/codex/blob/main/codex-rs/ext/image-generation/src/tool.rs)、[Codex 配置参考](https://developers.openai.com/codex/config-reference)。
@@ -147,7 +148,7 @@ git merge <目标版本的标签或提交>
 
 | 现有文件 | 需要保留的接入 |
 | --- | --- |
-| `backend/internal/server/routes/gateway.go` | Gemini Images 分发、共享图片限流器注入、三个 Responses 路径包装。 |
+| `backend/internal/server/routes/gateway.go` | Gemini Images 分发、共享图片限流器注入、三个 Responses 路径包装及 WebSocket 生图桥接注册。 |
 | `backend/internal/server/routes/user.go`、`backend/internal/handler/api_key_handler.go` | 生图候选模型接口及 Key 创建、编辑字段。 |
 | `backend/internal/service/api_key*`、`backend/internal/repository/api_key_repo.go`、DTO、`wire.go` | 每个 Key 的桥接选择、认证缓存字段、源分组权限检查和服务依赖。 |
 | `backend/ent/schema/api_key.go`、迁移 `235_api_key_image_bridge_model.sql` | 可空的 `image_bridge_model` 字段；合并 schema 后重新生成 Ent 与 Wire。 |

@@ -244,6 +244,77 @@ func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"result":"aW1hZ2U="`)
 }
 
+func TestGeminiImagesCodexWebSocketAutoInjectsExplicitImagePrompt(t *testing.T) {
+	imageCalls, textCalls := 0, 0
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		imageCalls++
+		return geminiTestImageResponse(), nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+	text := func(c *gin.Context) {
+		textCalls++
+		body, err := io.ReadAll(c.Request.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.MethodPost, c.Request.Method)
+		require.Equal(t, "/v1/responses", c.Request.URL.Path)
+		require.False(t, gjson.GetBytes(body, "type").Exists())
+		require.False(t, gjson.GetBytes(body, "generate").Exists())
+		require.False(t, gjson.GetBytes(body, "stream").Bool())
+		if textCalls == 1 {
+			require.Contains(t, string(body), geminiImageFunction)
+			c.JSON(http.StatusOK, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"id": "resp_final", "object": "response", "status": "completed", "output": []any{gin.H{"id": "msg_final", "type": "message", "role": "assistant", "status": "completed", "content": []any{gin.H{"type": "output_text", "text": "图片已生成。", "annotations": []any{}}}}}})
+	}
+
+	payload := []byte(`{"type":"response.create","generate":true,"model":"gpt-5.4","input":[{"role":"user","content":"帮我生成个蓝色机器猫，2K"},{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen"}]}],"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	c, _ := geminiImagesTestContext(key, "/v1/responses", string(payload))
+	c.Request.Method = http.MethodGet
+	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	normalized, response, _, handled, err := h.tryGeminiImageResponsesWebSocket(c, payload, service.NewCompositeRouteResolver(nil), text)
+
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.JSONEq(t, string(payload), string(normalized))
+	require.Equal(t, 1, imageCalls)
+	require.Equal(t, 2, textCalls)
+	output, ok := response["output"].([]any)
+	require.True(t, ok)
+	require.Condition(t, func() bool {
+		for _, raw := range output {
+			item, _ := raw.(map[string]any)
+			if item["type"] == "image_generation_call" && item["result"] == "aW1hZ2U=" {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func TestGeminiImagesCodexWebSocketOrdinaryTurnStaysNative(t *testing.T) {
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		t.Fatal("ordinary websocket turn must not call the image provider")
+		return nil, nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+	payload := []byte(`{"type":"response.create","model":"gpt-5.4","input":"解释一下这段代码","tools":[{"type":"image_generation"},{"type":"function","name":"shell","parameters":{"type":"object"}}]}`)
+	c, _ := geminiImagesTestContext(key, "/v1/responses", string(payload))
+	c.Request.Method = http.MethodGet
+	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	normalized, response, capture, handled, err := h.tryGeminiImageResponsesWebSocket(c, payload, nil, func(*gin.Context) {
+		t.Fatal("ordinary websocket turn must stay on the native websocket path")
+	})
+
+	require.NoError(t, err)
+	require.False(t, handled)
+	require.Nil(t, response)
+	require.Nil(t, capture)
+	require.Equal(t, "response.create", gjson.GetBytes(normalized, "type").String())
+	require.Equal(t, "shell", gjson.GetBytes(normalized, "tools.0.name").String())
+	require.Len(t, gjson.GetBytes(normalized, "tools").Array(), 1)
+}
+
 func TestGeminiImagesCodexAutoInjectionIntentClassification(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
