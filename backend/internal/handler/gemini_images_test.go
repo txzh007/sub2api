@@ -264,6 +264,73 @@ func TestGeminiImagesCodexAutoInjectionIntentClassification(t *testing.T) {
 	}
 }
 
+func TestGeminiImagesCodexAutoInjectionUsesCurrentTurnOnly(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "latest ordinary user ignores historical image request",
+			body: `{"input":[{"role":"user","content":"帮我生成一张猫图"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]},{"role":"user","content":"解释一下这段代码"}]}`,
+			want: false,
+		},
+		{
+			name: "tool continuation does not repeat historical image request",
+			body: `{"input":[{"role":"user","content":"帮我生成一张猫图"},{"type":"function_call","name":"shell","call_id":"call_1","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`,
+			want: false,
+		},
+		{
+			name: "latest explicit image request is detected",
+			body: `{"input":[{"role":"user","content":"解释一下这段代码"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]},{"role":"user","content":"现在帮我生成一张猫图"},{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen"}]}]}`,
+			want: true,
+		},
+		{
+			name: "standalone input text is current user input",
+			body: `{"previous_response_id":"resp_1","input":[{"type":"input_text","text":"生成一张月球基地图片"}]}`,
+			want: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			request := map[string]any{}
+			require.NoError(t, json.Unmarshal([]byte(tt.body), &request))
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			c.Request.Header.Set("User-Agent", "codex_cli_rs")
+			require.Equal(t, tt.want, shouldAutoInjectGeminiImageTool(c, request))
+		})
+	}
+}
+
+func TestGeminiImagesCodexPassiveHostedToolKeepsOrdinaryTextStreaming(t *testing.T) {
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		t.Fatal("ordinary text must not call the image provider")
+		return nil, nil
+	})
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+
+	body := `{"model":"gpt-5.4","input":[{"role":"user","content":"解释一下这段代码"},{"type":"additional_tools","tools":[{"type":"image_generation"},{"type":"namespace","name":"image_gen"}]}],"tools":[{"type":"image_generation"},{"type":"function","name":"shell","parameters":{"type":"object"}},{"type":"namespace","name":"image_gen"}],"stream":true}`
+	c, w := geminiImagesTestContext(key, "/v1/responses", body)
+	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	nextCalled := false
+	h.WrapGeminiImageResponses(func(child *gin.Context) {
+		nextCalled = true
+		forwarded, err := io.ReadAll(child.Request.Body)
+		require.NoError(t, err)
+		require.True(t, gjson.GetBytes(forwarded, "stream").Bool())
+		require.NotContains(t, string(forwarded), `"type":"image_generation"`)
+		require.Contains(t, string(forwarded), `"name":"shell"`)
+		require.Contains(t, string(forwarded), `"name":"image_gen"`)
+		child.Header("Content-Type", "text/event-stream")
+		child.Status(http.StatusOK)
+		_, _ = child.Writer.WriteString("event: response.output_text.delta\ndata: {\"delta\":\"native\"}\n\n")
+	}, service.NewCompositeRouteResolver(nil))(c)
+
+	require.True(t, nextCalled)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"delta":"native"`)
+}
+
 func TestGeminiImagesCodexNativeImageToolPassesThroughForLocalFileDelivery(t *testing.T) {
 	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
 		t.Fatal("the Responses bridge must not execute Codex's local image tool")

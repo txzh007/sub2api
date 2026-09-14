@@ -59,7 +59,9 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 		tool, hasTool := findGeminiBridgeImageTool(request)
 		requestModel, _ := request["model"].(string)
 		directImage := service.IsImageProviderModel(requestModel)
-		autoInjected := !hasTool && !directImage && shouldAutoInjectGeminiImageTool(c, request)
+		codexRequest := isCodexImageBridgeRequest(c)
+		autoInjected := !directImage && shouldAutoInjectGeminiImageTool(c, request)
+		passiveHostedTool := hasTool && codexRequest && !imageToolChoiceForced(request)
 		// A configured bridge must not turn every Codex Responses request into a
 		// buffered hosted-tool workflow. In particular, image_gen is a local Codex
 		// extension: Codex calls the active provider's Images API and then persists
@@ -71,8 +73,15 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 			next(c)
 			return
 		}
-		if !hasTool && !directImage && !autoInjected {
+		if !directImage && !autoInjected && (!hasTool || passiveHostedTool) {
+			changed := false
+			if passiveHostedTool {
+				changed = stripPassiveCodexHostedImageTools(request)
+			}
 			if normalizeGeminiImageHistory(request) {
+				changed = true
+			}
+			if changed {
 				normalizedBody, marshalErr := json.Marshal(request)
 				if marshalErr != nil {
 					h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to normalize image bridge history")
@@ -90,6 +99,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 				"text_model", requestModel,
 				"image_model", model,
 				"passive_image_tool_declared", hasCodexLocalImageTool(request),
+				"passive_hosted_tool_declared", passiveHostedTool,
 			)
 			tool = map[string]any{"type": "image_generation"}
 		}
@@ -134,13 +144,70 @@ func shouldAutoInjectGeminiImageTool(c *gin.Context, request map[string]any) boo
 	if c == nil || request == nil || codexLocalImageToolChoiceForced(request) {
 		return false
 	}
-	userAgent := strings.ToLower(c.GetHeader("User-Agent"))
-	originator := strings.ToLower(c.GetHeader("originator"))
-	if !strings.Contains(userAgent, "codex") && !strings.Contains(originator, "codex") {
+	if !isCodexImageBridgeRequest(c) {
 		return false
 	}
-	prompt, _ := imageBridgeInput(request)
+	prompt, currentUserInput := currentImageBridgeUserPrompt(request)
+	if !currentUserInput {
+		return false
+	}
 	return hasExplicitImageGenerationPrompt(prompt)
+}
+
+func isCodexImageBridgeRequest(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	userAgent := strings.ToLower(c.GetHeader("User-Agent"))
+	originator := strings.ToLower(c.GetHeader("originator"))
+	return strings.Contains(userAgent, "codex") || strings.Contains(originator, "codex")
+}
+
+// currentImageBridgeUserPrompt intentionally looks only at the current input
+// boundary. A previous image request in full conversation history must not
+// re-enable the buffered bridge for later tool outputs or ordinary text turns.
+func currentImageBridgeUserPrompt(request map[string]any) (string, bool) {
+	if text, ok := request["input"].(string); ok {
+		return text, true
+	}
+	items, _ := request["input"].([]any)
+	for i := len(items) - 1; i >= 0; i-- {
+		item, ok := items[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		itemType := strings.TrimSpace(fmt.Sprint(item["type"]))
+		role := strings.TrimSpace(fmt.Sprint(item["role"]))
+		if itemType == "additional_tools" || itemType == "compaction_trigger" || role == "system" || role == "developer" {
+			continue
+		}
+		if role == "user" {
+			return imageBridgeMessageText(item), true
+		}
+		if itemType == "input_text" {
+			text, _ := item["text"].(string)
+			return text, true
+		}
+		// A tool output or assistant item after the most recent user message is
+		// a continuation boundary, not a new image request.
+		return "", false
+	}
+	return "", false
+}
+
+func imageBridgeMessageText(item map[string]any) string {
+	if text, ok := item["content"].(string); ok {
+		return text
+	}
+	content, _ := item["content"].([]any)
+	texts := make([]string, 0, len(content))
+	for _, rawPart := range content {
+		part, _ := rawPart.(map[string]any)
+		if text, ok := part["text"].(string); ok && part["type"] == "input_text" {
+			texts = append(texts, text)
+		}
+	}
+	return strings.Join(texts, "\n")
 }
 
 // codexLocalImageToolChoiceForced distinguishes an explicit client decision to
@@ -272,6 +339,74 @@ func findGeminiBridgeImageTool(request map[string]any) (map[string]any, bool) {
 		}
 	}
 	return map[string]any{}, false
+}
+
+// Codex can advertise the hosted image_generation capability on every turn.
+// Leaving that passive declaration on an ordinary text request would make the
+// bridge buffer the whole response while the text model decides whether to use
+// it. Remove only that hosted capability; local Codex tools and all unrelated
+// tools continue down the native streaming path unchanged.
+func stripPassiveCodexHostedImageTools(request map[string]any) bool {
+	changed := false
+	for _, field := range []string{"tools", "additional_tools"} {
+		items, ok := request[field].([]any)
+		if !ok {
+			continue
+		}
+		filtered := make([]any, 0, len(items))
+		for _, item := range items {
+			if isBridgeImageTool(item) {
+				changed = true
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		if len(filtered) == 0 {
+			delete(request, field)
+		} else {
+			request[field] = filtered
+		}
+	}
+
+	input, ok := request["input"].([]any)
+	if !ok {
+		return changed
+	}
+	filteredInput := make([]any, 0, len(input))
+	for _, raw := range input {
+		item, _ := raw.(map[string]any)
+		if strings.TrimSpace(fmt.Sprint(item["type"])) != "additional_tools" {
+			filteredInput = append(filteredInput, raw)
+			continue
+		}
+		rawTools, _ := item["tools"].([]any)
+		filteredTools := make([]any, 0, len(rawTools))
+		for _, tool := range rawTools {
+			if isBridgeImageTool(tool) {
+				changed = true
+				continue
+			}
+			filteredTools = append(filteredTools, tool)
+		}
+		if len(filteredTools) == 0 {
+			changed = true
+			continue
+		}
+		if len(filteredTools) != len(rawTools) {
+			copyItem := make(map[string]any, len(item))
+			for key, value := range item {
+				copyItem[key] = value
+			}
+			copyItem["tools"] = filteredTools
+			filteredInput = append(filteredInput, copyItem)
+			continue
+		}
+		filteredInput = append(filteredInput, raw)
+	}
+	if changed {
+		request["input"] = filteredInput
+	}
+	return changed
 }
 
 func isBridgeImageTool(raw any) bool {
