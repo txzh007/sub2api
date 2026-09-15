@@ -224,6 +224,8 @@ func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
 		require.False(t, gjson.GetBytes(body, "stream").Bool())
 		if textCalls == 1 {
 			require.Contains(t, string(body), geminiImageFunction)
+			require.Equal(t, "function", gjson.GetBytes(body, "tool_choice.type").String())
+			require.Equal(t, geminiImageFunction, gjson.GetBytes(body, "tool_choice.name").String())
 			require.NotContains(t, string(body), `"name":"image_gen"`)
 			c.JSON(200, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
 			return
@@ -262,6 +264,8 @@ func TestGeminiImagesCodexWebSocketAutoInjectsExplicitImagePrompt(t *testing.T) 
 		require.False(t, gjson.GetBytes(body, "stream").Bool())
 		if textCalls == 1 {
 			require.Contains(t, string(body), geminiImageFunction)
+			require.Equal(t, "function", gjson.GetBytes(body, "tool_choice.type").String())
+			require.Equal(t, geminiImageFunction, gjson.GetBytes(body, "tool_choice.name").String())
 			c.JSON(http.StatusOK, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
 			return
 		}

@@ -24,9 +24,10 @@ import (
 
 const geminiImageFunction = "sub2api_generate_image"
 
-// WrapGeminiImageResponses hosts an image tool inside Responses. The selected
-// text model still decides whether to call it; Gemini runs only for actual
-// image calls. All internal calls go through the ordinary gateway handlers.
+// WrapGeminiImageResponses hosts an image tool inside Responses. Explicit
+// hosted-tool requests let the text model decide whether to call it, while a
+// prompt-classified Codex fallback forces the internal function. All internal
+// calls go through the ordinary gateway handlers.
 func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver *service.CompositeRouteResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !strings.HasSuffix(strings.TrimRight(c.Request.URL.Path, "/"), "/responses") {
@@ -104,6 +105,7 @@ func (h *GatewayHandler) WrapGeminiImageResponses(next gin.HandlerFunc, resolver
 				"passive_hosted_tool_declared", passiveHostedTool,
 			)
 			tool = map[string]any{"type": "image_generation"}
+			forceGeminiImageFunctionChoice(request)
 		}
 		// Resolve the independent image upstream only when the text model calls
 		// the tool. An unavailable image provider must not block ordinary text.
@@ -215,6 +217,7 @@ func (h *GatewayHandler) tryGeminiImageResponsesWebSocket(
 			"passive_hosted_tool_declared", passiveHostedTool,
 		)
 		tool = map[string]any{"type": "image_generation"}
+		forceGeminiImageFunctionChoice(request)
 	}
 
 	bridgeContext := c.Copy()
@@ -584,6 +587,17 @@ func prepareGeminiImageFunctionRequest(request map[string]any, referenceCount in
 	request["tools"] = tools
 	request["stream"] = false
 	request["parallel_tool_calls"] = false
+}
+
+// A prompt-classified fallback is already an explicit request to generate or
+// edit an image. Force the internal bridge function so the text model cannot
+// answer that the client-local image_gen tool is unavailable. The function
+// call is still used to expand the prompt and extract size/reference options.
+func forceGeminiImageFunctionChoice(request map[string]any) {
+	request["tool_choice"] = map[string]any{
+		"type": "function",
+		"name": geminiImageFunction,
+	}
 }
 
 func stripCodexLocalImageToolInputDeclarations(request map[string]any) {
