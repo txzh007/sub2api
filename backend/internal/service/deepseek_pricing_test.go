@@ -15,7 +15,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// deepseekPeakMultiplierAt：官方峰谷口径（2026-08-23 起生效）
+// deepseekPeakMultiplierAt：官方峰谷口径（2026-09-16 核验）
 // 高峰时段 01:00–04:00 与 06:00–10:00 UTC（半开区间，仅工作日）；
 // 北京时间周六/周日全天低谷；高峰价 = 2× 低谷价。
 // 2026-08-24 为周一（工作日），2026-08-22 周六、2026-08-23 周日。
@@ -58,7 +58,7 @@ func TestDeepseekPeakMultiplierAt(t *testing.T) {
 
 func TestIsDeepSeekModel(t *testing.T) {
 	deepseek := []string{
-		"deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp",
+		"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp",
 		"deepseek-chat", "deepseek-reasoner", "deepseek-v3-2-251201",
 		"deepseek-coder", "deepseek-foo", "deepseek-v4-pro-0813",
 		"DEEPSEEK-V4-PRO", " deepseek-v4-flash ",
@@ -85,8 +85,8 @@ func TestCalculateCostUnified_DeepseekDefaultCardPeakMultiplier(t *testing.T) {
 	resolver := NewModelPricingResolver(nil, bs)
 
 	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
-	// 低谷成本：按人民币价目表数字直接进入内部余额，不换算美元汇率。
-	offPeakTotal := 1000*1.5e-6 + 500*4.5e-6 + 1000*2.5e-8
+	// 中国站低谷成本：人民币价目表数字直接进入内部余额，不换算美元汇率。
+	offPeakTotal := 1000*1e-6 + 500*4e-6 + 1000*2e-8
 
 	offPeak, err := bs.CalculateCostUnified(CostInput{
 		Ctx: context.Background(), Model: "deepseek-v4-flash", Tokens: tokens,
@@ -110,7 +110,7 @@ func TestCalculateCostUnified_DeepseekProDefaultCardPeakMultiplier(t *testing.T)
 	resolver := NewModelPricingResolver(nil, bs)
 
 	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
-	offPeakTotal := 1000*4.5e-6 + 500*13.5e-6 + 1000*7.5e-8
+	offPeakTotal := 1000*4.5e-6 + 500*13.5e-6 + 1000*1.5e-7
 
 	offPeak, err := bs.CalculateCostUnified(CostInput{
 		Ctx: context.Background(), Model: "deepseek-v4-pro", Tokens: tokens,
@@ -134,7 +134,7 @@ func TestCalculateCostUnified_DeepseekVersionedNamePeakMultiplier(t *testing.T) 
 	resolver := NewModelPricingResolver(nil, bs)
 
 	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
-	offPeakTotal := 1000*1.5e-6 + 500*4.5e-6 + 1000*2.5e-8
+	offPeakTotal := 1000*1e-6 + 500*4e-6 + 1000*2e-8
 
 	offPeak, err := bs.CalculateCostUnified(CostInput{
 		Ctx: context.Background(), Model: "deepseek-v4-flash-0731", Tokens: tokens,
@@ -170,8 +170,8 @@ func TestCalculateCostUnified_DeepseekGroupPricingNotScaledByPeak(t *testing.T) 
 	require.Equal(t, PricingSourceGroup, resolved.Source)
 
 	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
-	// 分组自定义价：1000*1e-6 + 500*2e-6 + 1000*2.5e-8（缓存读沿用官方 flash 低谷价）
-	groupTotal := 1000*1e-6 + 500*2e-6 + 1000*2.5e-8
+	// 分组自定义价：输入输出取分组值，缓存读沿用官方 Flash 低谷价。
+	groupTotal := 1000*1e-6 + 500*2e-6 + 1000*2e-8
 
 	for _, pricingAt := range []time.Time{
 		time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC), // 低谷
@@ -238,6 +238,7 @@ func TestCalculateCostUnified_DeepseekPricingAtZeroFallsBackToNow(t *testing.T) 
 func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
 	// JSON 给任意价（模拟远端旧价/占位价），deepseek-* 必须被强制覆盖为官方低谷价。
 	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"deepseek-flash":               {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, CacheReadInputTokenCost: 1e-8},
 		"deepseek-v4-flash":            {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, CacheReadInputTokenCost: 1e-8},
 		"deepseek-v4-pro":              {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, CacheReadInputTokenCost: 1e-8},
 		"deepseek-v4-flash-vision-exp": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, CacheReadInputTokenCost: 1e-8},
@@ -250,31 +251,52 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
 		model                    string
 		input, output, cacheRead float64
 	}{
-		{"deepseek-v4-flash", 1.5e-6, 4.5e-6, 2.5e-8},
-		{"deepseek-v4-flash-vision-exp", 1.5e-6, 4.5e-6, 2.5e-8},
-		{"deepseek-v4-pro", 4.5e-6, 13.5e-6, 7.5e-8},
+		// deepseek-flash（V4.1-Flash 新名）与旧名使用同一张中国站人民币价卡。
+		{"deepseek-flash", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-flash", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-flash-vision-exp", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-pro", 4.5e-6, 13.5e-6, 1.5e-7},
 		// 已停服的 chat/reasoner：即使 JSON 有旧条目也按 flash 价兜底。
-		{"deepseek-chat", 1.5e-6, 4.5e-6, 2.5e-8},
-		{"deepseek-reasoner", 1.5e-6, 4.5e-6, 2.5e-8},
+		{"deepseek-chat", 1e-6, 4e-6, 2e-8},
+		{"deepseek-reasoner", 1e-6, 4e-6, 2e-8},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
+			// 默认价卡不随调用时点改变；峰谷倍率在成本计算阶段叠加。
 			pricing, err := bs.GetModelPricing(tt.model)
 			require.NoError(t, err)
 			require.InDelta(t, tt.input, pricing.InputPricePerToken, 1e-15)
 			require.InDelta(t, tt.output, pricing.OutputPricePerToken, 1e-15)
 			require.InDelta(t, tt.cacheRead, pricing.CacheReadPricePerToken, 1e-15)
+			// 固定未来时点复核默认价卡稳定。
+			atPricing, err := bs.getModelPricingAt(tt.model, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+			require.NoError(t, err)
+			require.InDelta(t, tt.input, atPricing.InputPricePerToken, 1e-15)
+			require.InDelta(t, tt.output, atPricing.OutputPricePerToken, 1e-15)
+			require.InDelta(t, tt.cacheRead, atPricing.CacheReadPricePerToken, 1e-15)
 			require.True(t, bs.HasIdentifiedTokenPricing(tt.model))
 		})
 	}
 
+	// Pro 档（含版本化名称）始终使用 Pro 价；官方中国站当前明确继续服务且计费不变。
+	for _, model := range []string{"deepseek-v4-pro", "deepseek-v4-pro-0813"} {
+		t.Run(model+"/stable-pro-rate", func(t *testing.T) {
+			pricing, err := bs.getModelPricingAt(model, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+			require.NoError(t, err)
+			require.InDelta(t, 4.5e-6, pricing.InputPricePerToken, 1e-15)
+			require.InDelta(t, 13.5e-6, pricing.OutputPricePerToken, 1e-15)
+			require.InDelta(t, 1.5e-7, pricing.CacheReadPricePerToken, 1e-15)
+		})
+	}
+
 	// 版本化名称（不在 JSON / fallbackPrices 精确表中）：按子串归档计价。
+	// flash-0731 归 Flash 档；版本化 Pro 名称归 Pro 档。
 	versioned := []struct {
 		model                    string
 		input, output, cacheRead float64
 	}{
-		{"deepseek-v4-pro-0813", 4.5e-6, 13.5e-6, 7.5e-8},
-		{"deepseek-v4-flash-0731", 1.5e-6, 4.5e-6, 2.5e-8},
+		{"deepseek-v4-pro-0813", 4.5e-6, 13.5e-6, 1.5e-7},
+		{"deepseek-v4-flash-0731", 1e-6, 4e-6, 2e-8},
 	}
 	for _, tt := range versioned {
 		t.Run(tt.model, func(t *testing.T) {
@@ -289,7 +311,7 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
 
 func TestGetModelPricing_UnknownDeepseekMapsToFlash(t *testing.T) {
 	// JSON 含 $0 占位条目（如旧 deepseek-v3-2-251201）：未知 deepseek-* 不再
-	// fail-closed，统一按 flash 低谷价兜底（1.5e-6/4.5e-6/2.5e-8），不得按 0 计费。
+	// fail-closed，统一按 Flash 低谷价兜底（1e-6/4e-6/2e-8），不得按 0 计费。
 	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
 		"deepseek-v3-2-251201": {InputCostPerToken: 0, OutputCostPerToken: 0},
 	}}
@@ -299,9 +321,9 @@ func TestGetModelPricing_UnknownDeepseekMapsToFlash(t *testing.T) {
 		t.Run(m, func(t *testing.T) {
 			pricing, err := bs.GetModelPricing(m)
 			require.NoError(t, err)
-			require.InDelta(t, 1.5e-6, pricing.InputPricePerToken, 1e-15)
-			require.InDelta(t, 4.5e-6, pricing.OutputPricePerToken, 1e-15)
-			require.InDelta(t, 2.5e-8, pricing.CacheReadPricePerToken, 1e-15)
+			require.InDelta(t, 1e-6, pricing.InputPricePerToken, 1e-15)
+			require.InDelta(t, 4e-6, pricing.OutputPricePerToken, 1e-15)
+			require.InDelta(t, 2e-8, pricing.CacheReadPricePerToken, 1e-15)
 		})
 	}
 }
@@ -329,9 +351,10 @@ func TestDeepseekPricingFileMatchesOperatorPolicyRates(t *testing.T) {
 		model                    string
 		input, output, cacheRead float64
 	}{
-		{"deepseek-v4-flash", 1.5e-6, 4.5e-6, 2.5e-8},
-		{"deepseek-v4-flash-vision-exp", 1.5e-6, 4.5e-6, 2.5e-8},
-		{"deepseek-v4-pro", 4.5e-6, 13.5e-6, 7.5e-8},
+		{"deepseek-flash", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-flash", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-flash-vision-exp", 1e-6, 4e-6, 2e-8},
+		{"deepseek-v4-pro", 4.5e-6, 13.5e-6, 1.5e-7},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
@@ -342,4 +365,64 @@ func TestDeepseekPricingFileMatchesOperatorPolicyRates(t *testing.T) {
 			require.InDelta(t, tt.cacheRead, entry.CacheReadInputTokenCost, 1e-15)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// 2026-09-16 中国站价卡：deepseek-flash（V4.1-Flash 新名）与旧名同价；
+// DeepSeek V4 Pro 继续服务且维持 Pro 价卡。
+// ---------------------------------------------------------------------------
+
+func TestCalculateCostUnified_DeepseekFlashAndLegacyFlashShareNewRates(t *testing.T) {
+	bs := newTestBillingService()
+	resolver := NewModelPricingResolver(nil, bs)
+
+	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
+	// 官方中国站低谷价：¥1/¥4/¥0.02 per MTok。
+	offPeakTotal := 1000*1e-6 + 500*4e-6 + 1000*2e-8
+
+	// deepseek-flash 与 deepseek-v4-flash 都取 Flash 新价。
+	// 时点取 2026-09-14（周一）12:00 UTC 低谷，峰谷倍率不影响断言。
+	for _, model := range []string{"deepseek-flash", "deepseek-v4-flash"} {
+		cost, err := bs.CalculateCostUnified(CostInput{
+			Ctx: context.Background(), Model: model, Tokens: tokens,
+			RateMultiplier: 1.0, Resolver: resolver,
+			PricingAt: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, offPeakTotal, cost.TotalCost, 1e-10, "model %s must use new flash rates", model)
+	}
+}
+
+func TestCalculateCostUnified_DeepseekProKeepsOfficialProRates(t *testing.T) {
+	bs := newTestBillingService()
+	resolver := NewModelPricingResolver(nil, bs)
+
+	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000}
+	proTotal := 1000*4.5e-6 + 500*13.5e-6 + 1000*1.5e-7
+
+	// 不同时点均保持 Pro 基础价；所选时间都在低谷，排除峰谷倍率干扰。
+	before, err := bs.CalculateCostUnified(CostInput{
+		Ctx: context.Background(), Model: "deepseek-v4-pro", Tokens: tokens,
+		RateMultiplier: 1.0, Resolver: resolver,
+		PricingAt: time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC),
+	})
+	require.NoError(t, err)
+	require.InDelta(t, proTotal, before.TotalCost, 1e-10)
+
+	after, err := bs.CalculateCostUnified(CostInput{
+		Ctx: context.Background(), Model: "deepseek-v4-pro", Tokens: tokens,
+		RateMultiplier: 1.0, Resolver: resolver,
+		PricingAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+	})
+	require.NoError(t, err)
+	require.InDelta(t, proTotal, after.TotalCost, 1e-10)
+
+	// 版本化名称同样保持 Pro 价。
+	versioned, err := bs.CalculateCostUnified(CostInput{
+		Ctx: context.Background(), Model: "deepseek-v4-pro-0813", Tokens: tokens,
+		RateMultiplier: 1.0, Resolver: resolver,
+		PricingAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+	})
+	require.NoError(t, err)
+	require.InDelta(t, proTotal, versioned.TotalCost, 1e-10)
 }

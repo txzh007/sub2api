@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-09-09",
+  "updated_at": "2026-09-16",
   "ledger_policy": {
     "domestic_currency": "CNY",
     "international_currency": "USD",
@@ -138,23 +138,22 @@
       },
       "notes": "暂按 MiniMax-M2.7-highspeed 家族价计费；官方页面目前只明确 M3 的 Token Plan，待官方按量价发布后更新。"
     },
-    "deepseek-v4-flash": {
+    "deepseek-flash": {
       "provider": "deepseek",
       "currency": "CNY",
       "billing_unit": "per_1m_tokens",
-      "status": "operator_policy",
+      "status": "verified",
       "source_ids": [
-        "ttoken_operator_policy",
         "deepseek_official_cn"
       ],
-      "verified_at": "2026-09-09",
+      "verified_at": "2026-09-16",
       "prices": {
-        "off_peak_input": 1.5,
-        "off_peak_output": 4.5,
-        "off_peak_cache_read": 0.025,
-        "peak_input": 3,
-        "peak_output": 9,
-        "peak_cache_read": 0.05
+        "off_peak_input": 1,
+        "off_peak_output": 4,
+        "off_peak_cache_read": 0.02,
+        "peak_input": 2,
+        "peak_output": 8,
+        "peak_cache_read": 0.04
       },
       "schedule": {
         "timezone": "Asia/Shanghai",
@@ -165,7 +164,16 @@
         "weekends": "off_peak",
         "peak_multiplier": 2
       },
-      "notes": "deepseek-v4-flash 是当前渠道别名；峰谷窗口和倍率属于 TToken 运营策略，不标记为 DeepSeek 官方同名模型价格。"
+      "notes": "DeepSeek-V4.1-Flash 官方中国站人民币价；TToken 直接使用人民币数字，不做汇率换算。"
+    },
+    "deepseek-v4-flash": {
+      "inherits": "deepseek-flash",
+      "status": "verified",
+      "source_ids": [
+        "deepseek_official_cn"
+      ],
+      "verified_at": "2026-09-16",
+      "notes": "官方兼容旧名，请求由 DeepSeek-V4.1-Flash 提供服务并按 Flash 价计费。"
     },
     "deepseek-v4-flash-0731": {
       "inherits": "deepseek-v4-flash",
@@ -179,19 +187,18 @@
       "provider": "deepseek",
       "currency": "CNY",
       "billing_unit": "per_1m_tokens",
-      "status": "operator_policy",
+      "status": "verified",
       "source_ids": [
-        "ttoken_operator_policy",
         "deepseek_official_cn"
       ],
-      "verified_at": "2026-09-09",
+      "verified_at": "2026-09-16",
       "prices": {
         "off_peak_input": 4.5,
         "off_peak_output": 13.5,
-        "off_peak_cache_read": 0.075,
+        "off_peak_cache_read": 0.15,
         "peak_input": 9,
         "peak_output": 27,
-        "peak_cache_read": 0.15
+        "peak_cache_read": 0.3
       },
       "schedule": {
         "timezone": "Asia/Shanghai",
@@ -202,7 +209,7 @@
         "weekends": "off_peak",
         "peak_multiplier": 2
       },
-      "notes": "deepseek-v4-pro 是当前渠道别名；峰谷窗口和倍率属于 TToken 运营策略，不标记为 DeepSeek 官方同名模型价格。"
+      "notes": "DeepSeek V4 Pro 官方中国站人民币价；2026-09-16 页面明确继续提供服务且计费不变。"
     },
     "deepseek-v4-pro-0813": {
       "inherits": "deepseek-v4-pro",

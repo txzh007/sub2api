@@ -93,7 +93,7 @@ func TestModelPriceSourcesCoverCurrentDomesticOverrides(t *testing.T) {
 	manifest := loadModelPriceSourceManifest(t)
 	models := []string{
 		"MiniMax-M2.7-highspeed", "MiniMax-M3",
-		"deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro", "deepseek-v4-pro-0813",
+		"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro", "deepseek-v4-pro-0813",
 		"doubao-seed-2-1-pro", "doubao-seed-2-1-turbo",
 		"glm-5.2", "glm-5.2-fast-preview", "glm-5.3",
 		"kimi-k2.7-code", "kimi-k3",
@@ -111,11 +111,11 @@ func TestDeepSeekSourceManifestMatchesRuntimePolicy(t *testing.T) {
 	for model, want := range map[string]struct {
 		input, output, cacheRead float64
 	}{
-		"deepseek-v4-flash": {1.5, 4.5, 0.025},
-		"deepseek-v4-pro":   {4.5, 13.5, 0.075},
+		"deepseek-flash":  {1, 4, 0.02},
+		"deepseek-v4-pro": {4.5, 13.5, 0.15},
 	} {
 		entry := manifest.Models[model]
-		require.Equal(t, "operator_policy", entry.Status)
+		require.Equal(t, "verified", entry.Status)
 		require.InDelta(t, want.input, entry.Prices["off_peak_input"], 1e-12)
 		require.InDelta(t, want.output, entry.Prices["off_peak_output"], 1e-12)
 		require.InDelta(t, want.cacheRead, entry.Prices["off_peak_cache_read"], 1e-12)
@@ -125,6 +125,9 @@ func TestDeepSeekSourceManifestMatchesRuntimePolicy(t *testing.T) {
 		require.Equal(t, "off_peak", entry.Schedule.Weekends)
 		require.Equal(t, 2.0, entry.Schedule.PeakMultiplier)
 	}
+	legacyFlash := manifest.Models["deepseek-v4-flash"]
+	require.Equal(t, "deepseek-flash", legacyFlash.Inherits)
+	require.Equal(t, "verified", legacyFlash.Status)
 }
 
 func TestManagedPricingBaselineContract(t *testing.T) {
@@ -132,7 +135,7 @@ func TestManagedPricingBaselineContract(t *testing.T) {
 	require.NoError(t, err)
 	var entries map[string]map[string]any
 	require.NoError(t, json.Unmarshal(body, &entries))
-	require.Len(t, entries, 162)
+	require.Len(t, entries, 163)
 
 	videoEntries := 0
 	domesticEntries := 0
@@ -151,7 +154,7 @@ func TestManagedPricingBaselineContract(t *testing.T) {
 		}
 	}
 	require.Equal(t, 16, videoEntries)
-	require.Equal(t, 21, domesticEntries)
+	require.Equal(t, 22, domesticEntries)
 }
 
 func TestManagedPricingBaselinePrecedesLocalOverride(t *testing.T) {
@@ -201,7 +204,8 @@ func TestStandaloneBinaryUsesEmbeddedManagedPricingBaseline(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, os.Chdir(previousDir)) })
 
 	entries := svc.loadPricingOverrideEntries()
-	require.Len(t, entries, 162)
+	require.Len(t, entries, 163)
+	require.Contains(t, entries, "deepseek-flash")
 	require.Contains(t, entries, "deepseek-v4-pro")
 	require.Contains(t, entries, "grok-imagine-video")
 }
