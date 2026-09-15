@@ -31,6 +31,9 @@ func RegisterGatewayRoutes(
 ) {
 	if h.Gateway != nil {
 		h.Gateway.SetImageGateway(h.OpenAIGateway)
+		// Markdown image fetches do not carry the API key used for Responses.
+		// The UUID path is the bearer secret for this read-only generated asset.
+		r.GET("/v1/sub2api/generated-images/:image_id", h.Gateway.CodexBridgeImage)
 	}
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize)

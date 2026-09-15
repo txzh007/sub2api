@@ -675,7 +675,8 @@ func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool m
 		if err != nil {
 			return nil, capture, err
 		}
-		return newImageBridgeResponse(request, images), capture, nil
+		urls := takeCodexBridgeImageURLs(images)
+		return newImageBridgeResponse(request, appendCodexBridgeImageMarkdown(images, urls)), capture, nil
 	}
 	prepareGeminiImageFunctionRequest(request, len(references))
 	normalizeGeminiImageHistory(request)
@@ -685,6 +686,7 @@ func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool m
 	}
 	outputs, _ := response["output"].([]any)
 	var imageItems, toolOutputs []any
+	var imageURLs []string
 	var visibleOutputs []any
 	internalCalls, otherCalls := 0, 0
 	for _, raw := range outputs {
@@ -738,6 +740,7 @@ func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool m
 		if err != nil {
 			return nil, imageCapture, err
 		}
+		imageURLs = append(imageURLs, takeCodexBridgeImageURLs(images)...)
 		imageItems = append(imageItems, images...)
 		toolOutputs = append(toolOutputs, map[string]any{"type": "function_call_output", "call_id": item["call_id"], "output": "Image generation completed. The generated image is attached to this response and visible to the user. Do not generate it again or invent a local file path."})
 	}
@@ -773,12 +776,13 @@ func (h *GatewayHandler) runGeminiImageResponses(c *gin.Context, request, tool m
 	if err != nil {
 		// The images were successfully generated and charged. Deliver them even
 		// when the optional textual follow-up fails instead of losing the result.
-		fallback := newImageBridgeResponse(request, append(visibleOutputs, imageItems...))
+		fallbackOutput := append(visibleOutputs, imageItems...)
+		fallback := newImageBridgeResponse(request, appendCodexBridgeImageMarkdown(fallbackOutput, imageURLs))
 		fallback["usage"] = response["usage"]
 		return fallback, capture, nil
 	}
 	finalOutputs, _ := final["output"].([]any)
-	final["output"] = append(append(visibleOutputs, imageItems...), finalOutputs...)
+	final["output"] = appendCodexBridgeImageMarkdown(append(append(visibleOutputs, imageItems...), finalOutputs...), imageURLs)
 	mergeImageBridgeUsage(final, response)
 	return final, finalCapture, nil
 }
@@ -871,7 +875,13 @@ func (h *GatewayHandler) callGeminiImageTool(c *gin.Context, route service.Compo
 				image.MimeType = http.DetectContentType(decoded)
 			}
 		}
-		output = append(output, map[string]any{"id": "ig_sub2api_" + uuid.NewString(), "type": "image_generation_call", "status": "completed", "result": image.B64JSON, "output_format": strings.TrimPrefix(image.MimeType, "image/"), "model": route.UpstreamModel, "revised_prompt": prompt})
+		item := map[string]any{"id": "ig_sub2api_" + uuid.NewString(), "type": "image_generation_call", "status": "completed", "result": image.B64JSON, "output_format": strings.TrimPrefix(image.MimeType, "image/"), "model": route.UpstreamModel, "revised_prompt": prompt}
+		if imageURL, saveErr := h.saveCodexBridgeImage(c, image.B64JSON, image.MimeType); saveErr != nil {
+			slog.Error("codex_image_bridge.persist_failed", "error", saveErr)
+		} else {
+			item[codexBridgeImageURLField] = imageURL
+		}
+		output = append(output, item)
 	}
 	if len(output) == 0 {
 		return nil, capture, fmt.Errorf("gemini returned no image")

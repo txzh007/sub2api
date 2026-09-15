@@ -4,9 +4,9 @@
 
 - OpenAI Images 请求 → 独立生图上游，默认 OpenAI 协议；也可使用 Gemini 原生 `generateContent` 适配。
 - Codex 原生 `image_gen.imagegen` → Codex 客户端调用当前供应商的 Images API → TToken 改写为 Key 选择的生图模型 → Codex 客户端将结果保存为本地文件。
-- 仅提供 Responses 托管 `image_generation` 的客户端 → 网关执行独立生图接口 → 返回 `image_generation_call` 图片结果，作为兼容回退。
+- 没有本地 `image_gen` 的 Codex / Responses 客户端 → 网关执行独立生图接口 → 返回 `image_generation_call`，同时把图片持久化并追加可直接展示的 HTTPS Markdown 图片，作为兼容回退。
 
-TToken 不截获 Codex 原生 `image_gen` 命名空间。文件必须由运行 Codex 的客户端写入，因为远程网关无法访问用户的本地工作区。兼容回退链路才由网关执行名为 `sub2api_generate_image` 的内部函数。
+TToken 不截获 Codex 原生 `image_gen` 命名空间。真正的本地文件必须由运行 Codex 的客户端写入，因为远程网关无法访问用户的本地工作区。兼容回退链路由网关执行名为 `sub2api_generate_image` 的内部函数，文件保存在服务端数据目录的 `codex-generated-images/` 下，并通过随机 UUID 地址展示。
 
 ## 创建密钥时选择生图模型
 
@@ -113,16 +113,18 @@ env_key = "SUB2API_API_KEY"
 supports_websockets = true
 ```
 
-启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。新版 Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口先解析 Key 选择的公开别名，再通过生图接口原有的 `model_mapping` 得到实际上游模型。Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
+启动 Codex 的环境中提供 `SUB2API_API_KEY`，模型名换成分组实际支持的编程模型。Codex 的原生图片扩展会使用当前模型供应商及认证调用 `/images/generations` 或 `/images/edits`；TToken 在该入口先解析 Key 选择的公开别名，再通过生图接口原有的 `model_mapping` 得到实际上游模型。原生扩展可用时，Codex 收到兼容 Images 响应后自行解码，并把图片保存到其 `generated_images` 目录，同时在工具结果中提供文件路径。
+
+当前 Codex 客户端对 API Key / 自定义 provider 有客户端侧能力门禁：即使网关在 `/models` 清单里声明图片能力，客户端也不会因此加载内置 `image_gen`。这不是 TToken 的模型清单能够解除的限制，详见 [Codex 对自定义 provider 生图能力的跟踪](https://github.com/openai/codex/issues/24465) 和 [0.153.0 的工具门禁实现](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/core/src/tools/spec_plan.rs)。因此此类客户端由 TToken 自动注入兼容桥接，并用 Markdown 图片交付实际结果。
 
 开启后的行为与边界：
 
-- Codex 客户端没有声明本地 `image_gen` 时，明确的生成图片、绘图或改图指令会自动注入托管桥接，并强制文字模型调用内部生图函数，避免模型自行回答“工具不可用”；普通文字请求和生图能力排障问题不会进入聚合链路，继续保持原有流式响应。HTTP Responses Lite 同样支持该自动回退。
+- Codex 客户端没有声明本地 `image_gen` 时，明确的生成图片、绘图或改图指令会自动注入托管桥接，并强制文字模型调用内部生图函数，避免模型自行回答“工具不可用”；生成结果保存到 `DATA_DIR/codex-generated-images/`（未设置 `DATA_DIR` 时使用 `pricing.data_dir`），回复末尾追加 `/v1/sub2api/generated-images/<UUID>.<格式>` 的 Markdown 图片。普通文字请求和生图能力排障问题不会进入聚合链路，继续保持原有流式响应。HTTP Responses Lite 同样支持该自动回退。
 - Codex 通过 Responses WebSocket 发起新会话时，首个明确生图的 `response.create` 同样会自动注入；结果以 `response.image_generation_call.*` 和 `response.completed` 帧返回。完成后网关正常关闭这条图片连接，后续请求由客户端重新连接。
 - Codex 原生 `image_gen` namespace、扁平 `image_gen.imagegen` 和兼容名称 `image_gen__imagegen` 均原样透传；网关不会将它们改成 `image_generation_call`。
 - Codex 客户端负责执行原生工具、读取参考图片和保存成图；TToken 只处理它随后发出的 Images 请求。会话中的预览与工具结果完全沿用 Codex 原生行为，不再由网关额外合成一份 `image_generation_call`。
 - Images 请求到达 TToken 后，才检查生图分组、模型和接口可用性，并使用图片分组独立计费；生图接口不可用不会阻止普通文字请求。
-- Responses 原生 `image_generation` 仍使用服务端兼容回退。该链路返回协议规定的 Base64 `image_generation_call`，适用于没有 Codex 本地图片扩展的客户端，但不会产生本地文件。
+- Responses 原生 `image_generation` 仍使用服务端兼容回退。该链路保留协议规定的 Base64 `image_generation_call`，并额外返回服务端持久化图片的 Markdown；它不会也不能在远程 Codex 电脑上创建本地文件。
 - 托管兼容链路通常消耗一次文本决策请求、一次生图请求、一次文本续写请求；各调用使用独立计费请求 ID。文本续写失败时仍交付已生成图片。
 - 只有托管兼容链路需要聚合内部请求，并受 `previous_response_id`、`background:true` 限制；WebSocket 当前只在每条连接的首个 `response.create` 执行托管桥接。Codex 原生工具走普通 Responses 工具循环，不受这组桥接限制。
 - 本地文件参考图由 Codex 原生工具读取并上传，远程 TToken 不直接读取提示词中的本地路径。
@@ -148,7 +150,7 @@ git merge <目标版本的标签或提交>
 
 | 现有文件 | 需要保留的接入 |
 | --- | --- |
-| `backend/internal/server/routes/gateway.go` | Gemini Images 分发、共享图片限流器注入、三个 Responses 路径包装及 WebSocket 生图桥接注册。 |
+| `backend/internal/server/routes/gateway.go` | Gemini Images 分发、共享图片限流器注入、三个 Responses 路径包装、WebSocket 生图桥接注册，以及无需 API Key 的随机 UUID 图片读取路由。 |
 | `backend/internal/server/routes/user.go`、`backend/internal/handler/api_key_handler.go` | 生图候选模型接口及 Key 创建、编辑字段。 |
 | `backend/internal/service/api_key*`、`backend/internal/repository/api_key_repo.go`、DTO、`wire.go` | 每个 Key 的桥接选择、认证缓存字段、源分组权限检查和服务依赖。 |
 | `backend/ent/schema/api_key.go`、迁移 `235_api_key_image_bridge_model.sql` | 可空的 `image_bridge_model` 字段；合并 schema 后重新生成 Ent 与 Wire。 |
@@ -161,7 +163,7 @@ git merge <目标版本的标签或提交>
 | `backend/internal/service/openai_gateway_service.go` | 内部执行 Gemini 工具时禁止重复注入 OpenAI 生图工具。 |
 | `backend/internal/service/gemini_image_output_accounting.go` | Images 桥接请求使用实际输出图数，禁止空图按模型名兜底计费。 |
 
-核心实现与回归用例放在新增的 `gemini_images*`、`codex_gemini_images.go`、`external_image_tool.go` 文件中。即使 Git 没有报告冲突，也要验证新上游是否更改了 Gemini 原生处理、工具注入、Responses 事件、调度和计费接口。
+核心实现与回归用例放在新增的 `gemini_images*`、`codex_gemini_images.go`、`codex_bridge_image_files.go`、`external_image_tool.go` 文件中。即使 Git 没有报告冲突，也要验证新上游是否更改了 Gemini 原生处理、工具注入、Responses 事件、调度和计费接口。
 
 在 `backend` 目录使用项目要求的 Go 版本执行：
 

@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -244,6 +246,66 @@ func TestGeminiImagesCodexAutoInjectsForExplicitImagePrompt(t *testing.T) {
 	require.Equal(t, 2, textCalls)
 	require.Contains(t, w.Body.String(), "response.image_generation_call.completed")
 	require.Contains(t, w.Body.String(), `"result":"aW1hZ2U="`)
+}
+
+func TestGeminiImagesCodexAutoInjectionPersistsRenderableMarkdown(t *testing.T) {
+	h, key := newGeminiImagesTestHandler(t, service.PlatformOpenAI, func(*http.Request) (*http.Response, error) {
+		return geminiTestImageResponse(), nil
+	})
+	h.cfg.Pricing.DataDir = t.TempDir()
+	key.ImageBridgeModel = stringPointer(service.DefaultGeminiImageModel)
+	textCalls := 0
+	text := func(c *gin.Context) {
+		textCalls++
+		if textCalls == 1 {
+			c.JSON(http.StatusOK, gin.H{"id": "resp_first", "status": "completed", "output": []any{gin.H{"id": "fc_image", "type": "function_call", "name": geminiImageFunction, "call_id": "call_image", "arguments": `{"prompt":"a blue robot cat","size":"2K"}`}}})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"id": "resp_final", "object": "response", "status": "completed", "output": []any{gin.H{"id": "msg_final", "type": "message", "role": "assistant", "status": "completed", "content": []any{gin.H{"type": "output_text", "text": "图片已生成。", "annotations": []any{}}}}}})
+	}
+
+	c, w := geminiImagesTestContext(key, "/v1/responses", `{"model":"gpt-5.4","input":"帮我生成一张蓝色机器猫，2K","stream":false}`)
+	c.Request.Host = "ttoken.example"
+	c.Request.Header.Set("User-Agent", "codex_cli_rs")
+	c.Request.Header.Set("X-Forwarded-Proto", "https")
+	h.WrapGeminiImageResponses(text, service.NewCompositeRouteResolver(nil))(c)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, 2, textCalls)
+	require.NotContains(t, w.Body.String(), codexBridgeImageURLField)
+
+	var response struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	var markdown string
+	for _, item := range response.Output {
+		for _, content := range item.Content {
+			if strings.HasPrefix(content.Text, "![generated image](") {
+				markdown = content.Text
+			}
+		}
+	}
+	require.NotEmpty(t, markdown)
+	imageURL := strings.TrimSuffix(strings.TrimPrefix(markdown, "![generated image]("), ")")
+	require.True(t, strings.HasPrefix(imageURL, "https://ttoken.example"+codexBridgeImageRoute), imageURL)
+	parsed, err := url.Parse(imageURL)
+	require.NoError(t, err)
+
+	imageRecorder := httptest.NewRecorder()
+	imageContext, _ := gin.CreateTestContext(imageRecorder)
+	imageContext.Request = httptest.NewRequest(http.MethodGet, parsed.RequestURI(), nil)
+	imageContext.Params = gin.Params{{Key: "image_id", Value: path.Base(parsed.Path)}}
+	h.CodexBridgeImage(imageContext)
+	require.Equal(t, http.StatusOK, imageRecorder.Code)
+	require.Equal(t, "image/png", imageRecorder.Header().Get("Content-Type"))
+	require.Equal(t, "image", imageRecorder.Body.String())
 }
 
 func TestGeminiImagesCodexWebSocketAutoInjectsExplicitImagePrompt(t *testing.T) {
