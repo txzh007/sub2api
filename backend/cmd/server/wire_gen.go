@@ -381,8 +381,14 @@ func provideServiceBuildInfo(buildInfo handler.BuildInfo) service.BuildInfo {
 }
 
 func providePluginHostInfo(buildInfo handler.BuildInfo) service.PluginHostInfo {
+	version := buildInfo.Sub2APIVersion
+	if version == "" {
+		// Preserve compatibility for tests and source builds created before TToken
+		// started tracking its product version independently from Sub2API.
+		version = buildInfo.Version
+	}
 	return service.PluginHostInfo{
-		Version:   buildInfo.Version,
+		Version:   version,
 		BuildType: buildInfo.BuildType,
 	}
 }

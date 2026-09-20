@@ -156,8 +156,9 @@ func runMainServer() {
 	}
 
 	buildInfo := handler.BuildInfo{
-		Version:   Version,
-		BuildType: BuildType,
+		Version:        Version,
+		Sub2APIVersion: UpstreamVersion,
+		BuildType:      BuildType,
 	}
 
 	app, err := initializeApplication(buildInfo)

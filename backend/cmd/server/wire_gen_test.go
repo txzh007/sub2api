@@ -12,12 +12,34 @@ import (
 
 func TestProvideServiceBuildInfo(t *testing.T) {
 	in := handler.BuildInfo{
-		Version:   "v-test",
-		BuildType: "release",
+		Version:        "0.6.0",
+		Sub2APIVersion: "0.2.7",
+		BuildType:      "release",
 	}
 	out := provideServiceBuildInfo(in)
 	require.Equal(t, in.Version, out.Version)
 	require.Equal(t, in.BuildType, out.BuildType)
+}
+
+func TestProvidePluginHostInfoUsesSub2APICompatibilityVersion(t *testing.T) {
+	in := handler.BuildInfo{
+		Version:        "0.6.0",
+		Sub2APIVersion: "0.2.7",
+		BuildType:      "release",
+	}
+
+	out := providePluginHostInfo(in)
+
+	require.Equal(t, "0.2.7", out.Version)
+	require.Equal(t, in.BuildType, out.BuildType)
+}
+
+func TestProvidePluginHostInfoFallsBackToProductVersion(t *testing.T) {
+	in := handler.BuildInfo{Version: "0.2.7", BuildType: "source"}
+
+	out := providePluginHostInfo(in)
+
+	require.Equal(t, in.Version, out.Version)
 }
 
 func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
