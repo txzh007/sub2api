@@ -13,7 +13,7 @@ import (
 func TestProvideServiceBuildInfo(t *testing.T) {
 	in := handler.BuildInfo{
 		Version:        "0.6.0",
-		Sub2APIVersion: "0.2.7",
+		Sub2APIVersion: "0.2.8",
 		BuildType:      "release",
 	}
 	out := provideServiceBuildInfo(in)
@@ -24,13 +24,13 @@ func TestProvideServiceBuildInfo(t *testing.T) {
 func TestProvidePluginHostInfoUsesSub2APICompatibilityVersion(t *testing.T) {
 	in := handler.BuildInfo{
 		Version:        "0.6.0",
-		Sub2APIVersion: "0.2.7",
+		Sub2APIVersion: "0.2.8",
 		BuildType:      "release",
 	}
 
 	out := providePluginHostInfo(in)
 
-	require.Equal(t, "0.2.7", out.Version)
+	require.Equal(t, "0.2.8", out.Version)
 	require.Equal(t, in.BuildType, out.BuildType)
 }
 
@@ -63,6 +63,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 	)
 	accountExpirySvc := service.NewAccountExpiryService(nil, time.Second)
 	codexVersionSyncSvc := service.NewOpenAICodexVersionSyncService(nil, nil, nil, time.Second)
+	claudeCodeVersionSyncSvc := service.NewClaudeCodeVersionSyncService(nil, nil, nil, time.Second)
 	proxyExpirySvc := service.NewProxyExpiryService(nil, time.Second)
 	subscriptionExpirySvc := service.NewSubscriptionExpiryService(nil, time.Second)
 	pricingSvc := service.NewPricingService(cfg, nil)
@@ -90,6 +91,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		accountExpirySvc,
 		nil, // cnProviderBalanceCheck
 		codexVersionSyncSvc,
+		claudeCodeVersionSyncSvc,
 		proxyExpirySvc,
 		subscriptionExpirySvc,
 		&service.UsageCleanupService{},
@@ -115,6 +117,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // quotaFlusher
 		nil, // upstreamBillingProbe
 		nil, // ollamaCloudUsage
+		nil, // opencodeGoUsage
 		nil, // auditLog
 		nil, // openAIAutoReset
 		nil, // promptAudit

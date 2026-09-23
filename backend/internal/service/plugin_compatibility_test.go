@@ -42,13 +42,13 @@ func TestEvaluatePluginCompatibilityRejectsProtocolMismatch(t *testing.T) {
 func TestEvaluatePluginCompatibilityUsesUpstreamCompatibilityVersion(t *testing.T) {
 	manifest := testPluginManifest(nil)
 	manifest.Requires.Sub2API = ">=0.2.0 <0.3.0"
-	manifest.Requires.TestedSub2APIVersions = []string{"0.2.7"}
+	manifest.Requires.TestedSub2APIVersions = []string{"0.2.8"}
 
-	result := EvaluatePluginCompatibility(manifest, PluginHostInfo{Version: "0.2.7"})
+	result := EvaluatePluginCompatibility(manifest, PluginHostInfo{Version: "0.2.8"})
 
 	require.True(t, result.Compatible)
 	assert.True(t, result.Tested)
-	assert.Equal(t, "0.2.7", result.CurrentSub2API)
+	assert.Equal(t, "0.2.8", result.CurrentSub2API)
 }
 
 func TestMatchesSemverRange(t *testing.T) {
