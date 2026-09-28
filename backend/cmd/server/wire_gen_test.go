@@ -13,7 +13,7 @@ import (
 func TestProvideServiceBuildInfo(t *testing.T) {
 	in := handler.BuildInfo{
 		Version:        "0.6.0",
-		Sub2APIVersion: "0.2.8",
+		Sub2APIVersion: "0.2.9",
 		BuildType:      "release",
 	}
 	out := provideServiceBuildInfo(in)
@@ -24,13 +24,13 @@ func TestProvideServiceBuildInfo(t *testing.T) {
 func TestProvidePluginHostInfoUsesSub2APICompatibilityVersion(t *testing.T) {
 	in := handler.BuildInfo{
 		Version:        "0.6.0",
-		Sub2APIVersion: "0.2.8",
+		Sub2APIVersion: "0.2.9",
 		BuildType:      "release",
 	}
 
 	out := providePluginHostInfo(in)
 
-	require.Equal(t, "0.2.8", out.Version)
+	require.Equal(t, "0.2.9", out.Version)
 	require.Equal(t, in.BuildType, out.BuildType)
 }
 
