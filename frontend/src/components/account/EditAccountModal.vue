@@ -3063,9 +3063,17 @@
       </div>
 
       <!-- Group Selection - 仅标准模式显示 -->
+      <AccountImageProviderToggle
+        v-model="form.group_ids"
+        :groups="selectableGroups"
+        :platform="account?.platform"
+        :type="account?.type"
+        :shadow="isSparkShadow"
+      />
       <GroupSelector
         v-model="form.group_ids"
         :groups="selectableGroups"
+        exclude-image-generation
         :platform="account?.platform"
         :mixed-scheduling="mixedScheduling"
         data-tour="account-form-groups"
@@ -3156,6 +3164,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import AccountImageProviderToggle from '@/components/account/AccountImageProviderToggle.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'

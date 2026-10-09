@@ -25,6 +25,7 @@ type GroupHandler struct {
 	adminService         service.AdminService
 	dashboardService     *service.DashboardService
 	groupCapacityService *service.GroupCapacityService
+	modelCatalog         *service.GroupModelCatalogService
 	cfg                  *config.Config
 }
 
@@ -102,6 +103,12 @@ func NewGroupHandlerWithConfig(adminService service.AdminService, dashboardServi
 		groupCapacityService: groupCapacityService,
 		cfg:                  cfg,
 	}
+}
+
+func ProvideGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService, cfg *config.Config, catalog *service.GroupModelCatalogService) *GroupHandler {
+	h := NewGroupHandlerWithConfig(adminService, dashboardService, groupCapacityService, cfg)
+	h.modelCatalog = catalog
+	return h
 }
 
 func (h *GroupHandler) isSimpleMode() bool {
@@ -617,11 +624,12 @@ func (h *GroupHandler) GetGroupModelAllowlistCandidates(c *gin.Context) {
 		return
 	}
 
-	models, err := h.adminService.GetGroupModelsListCandidates(
-		c.Request.Context(),
-		groupID,
-		c.Query("platform"),
-	)
+	var models []string
+	if h.modelCatalog != nil {
+		models, err = h.modelCatalog.ListCandidates(c.Request.Context(), groupID, c.Query("platform"))
+	} else {
+		models, err = h.adminService.GetGroupModelsListCandidates(c.Request.Context(), groupID, c.Query("platform"))
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

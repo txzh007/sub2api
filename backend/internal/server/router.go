@@ -132,4 +132,8 @@ func registerRoutes(
 	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService, panelRateLimiter, redisClient)
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
+	if h.Admin != nil && h.Admin.PelicanTest != nil {
+		h.Admin.PelicanTest.SetGateway(r)
+		h.Admin.PelicanTest.StartWorkers()
+	}
 }

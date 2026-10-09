@@ -2,7 +2,7 @@
   <div>
     <label class="input-label">
       {{ t('admin.users.groups') }}
-      <span class="font-normal text-gray-400">{{ t('common.selectedCount', { count: modelValue.length }) }}</span>
+      <span class="font-normal text-gray-400">{{ t('common.selectedCount', { count: selectedCount }) }}</span>
     </label>
     <div
       v-if="isSearchable"
@@ -73,6 +73,7 @@ interface Props {
   platform?: GroupPlatform // Optional platform filter
   mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
   searchable?: boolean | 'auto'
+  excludeImageGeneration?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -83,6 +84,9 @@ const emit = defineEmits<{
 }>()
 
 const searchText = ref('')
+const selectedCount = computed(() => props.excludeImageGeneration
+  ? props.modelValue.filter(id => !props.groups.some(group => group.id === id && group.system_role === 'image_generation')).length
+  : props.modelValue.length)
 
 const isSearchable = computed(() => {
   if (props.searchable === 'auto') return props.groups.length > 5
@@ -94,6 +98,9 @@ const filteredGroups = computed(() => {
   let result = authStore.isSimpleMode
     ? props.groups.filter((g) => g.platform !== 'composite')
     : props.groups
+  if (props.excludeImageGeneration) {
+    result = result.filter(group => group.system_role !== 'image_generation')
+  }
   if (props.platform) {
     // antigravity 账户启用混合调度后，可选择 anthropic/gemini 分组
     if (props.platform === 'antigravity' && props.mixedScheduling) {

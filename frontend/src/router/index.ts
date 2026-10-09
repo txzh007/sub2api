@@ -463,6 +463,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/groups/model-allowlist',
+    name: 'AdminModelAllowlist',
+    component: () => import('@/views/admin/ModelAllowlistView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Model Allowlist Assignment',
+      titleKey: 'admin.modelAllowlist.title',
+      descriptionKey: 'admin.modelAllowlist.description'
+    }
+  },
+  {
     path: '/admin/channels',
     redirect: '/admin/channels/pricing'
   },
@@ -500,6 +512,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Channel Monitor',
       titleKey: 'admin.channelMonitor.title',
       descriptionKey: 'admin.channelMonitor.description'
+    }
+  },
+  {
+    path: '/admin/groups/pelican-test',
+    name: 'AdminPelicanTest',
+    component: () => import('@/views/admin/PelicanTestView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Pelican Test',
+      titleKey: 'admin.pelicanTest.title',
+      descriptionKey: 'admin.pelicanTest.description'
     }
   },
   {
@@ -973,6 +997,7 @@ router.beforeEach(async (to, _from, next) => {
   // 简易模式下限制访问某些页面
   if (authStore.isSimpleMode) {
     const restrictedPaths = [
+      '/admin/groups/model-allowlist',
       '/admin/subscriptions',
       '/admin/redeem',
       '/subscriptions',

@@ -46,6 +46,7 @@
                   'sidebar-link-collapsed': sidebarCollapsed
                 }"
                 :title="sidebarCollapsed ? item.label : undefined"
+                :id="item.path === '/admin/groups' ? 'sidebar-group-manage' : undefined"
                 @click="handleGroupClick(item)"
               >
                 <component :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -778,7 +779,17 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
-    { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
+    {
+      path: '/admin/groups',
+      label: t('nav.groups'),
+      icon: FolderIcon,
+      expandOnly: true,
+      children: [
+        { path: '/admin/groups', label: t('nav.groupList'), icon: FolderIcon },
+        ...(!authStore.isSimpleMode ? [{ path: '/admin/groups/model-allowlist', label: t('nav.modelAllowlist'), icon: ShieldIcon }] : []),
+        { path: '/admin/groups/pelican-test', label: t('nav.pelicanTest'), icon: ChartIcon },
+      ],
+    },
     {
       path: '/admin/channels',
       label: t('nav.channelManagement'),

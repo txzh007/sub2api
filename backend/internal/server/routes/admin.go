@@ -42,6 +42,7 @@ func RegisterAdminRoutes(
 
 		// 分组管理
 		registerGroupRoutes(admin, h)
+		registerPelicanTestRoutes(admin, h)
 
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
@@ -132,6 +133,7 @@ func RegisterAdminRoutes(
 		registerAuditLogRoutes(admin, h, stepUpAuth)
 	}
 }
+
 
 func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	promptAudit := admin.Group("/prompt-audit")
@@ -358,6 +360,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
+		accounts.POST("/activity/batch", h.Admin.Ops.GetTTokenAccountActivity)
 		accounts.GET("/upstream-billing-rates", h.Admin.Account.GetUpstreamBillingRates)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)

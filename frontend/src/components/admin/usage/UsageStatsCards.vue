@@ -56,6 +56,13 @@
             </span>
           </span>
         </p>
+        <p
+          class="mt-1 flex flex-wrap items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+          :title="t('usage.cacheHitRateHint')"
+        >
+          <span>{{ t('usage.cacheHitRate') }}</span>
+          <span class="font-medium tabular-nums text-sky-600 dark:text-sky-400">{{ cacheHitRate }}</span>
+        </p>
       </div>
     </div>
     <div class="card p-4 flex items-center gap-3">
@@ -94,6 +101,7 @@ import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
+import { formatCacheHitRate } from '@/utils/usageCache'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
@@ -105,6 +113,12 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+
+const cacheHitRate = computed(() => formatCacheHitRate({
+  input_tokens: props.stats?.total_input_tokens,
+  cache_creation_tokens: props.stats?.total_cache_creation_tokens,
+  cache_read_tokens: props.stats?.total_cache_read_tokens,
+}))
 
 const totalAccountCost = computed(() => {
   const stats = props.stats as (AdminUsageStatsResponse & { total_account_cost?: number }) | null

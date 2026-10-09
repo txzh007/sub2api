@@ -566,6 +566,8 @@ export interface ReasoningEffortMapping {
 
 export interface Group {
   id: number
+  // Available on groups returned by admin endpoints.
+  system_role?: '' | 'image_generation'
   name: string
   description: string | null
   platform: GroupPlatform
@@ -1218,6 +1220,7 @@ export interface Account {
   platform: AccountPlatform
   type: AccountType
   purpose: 'general' | 'image_provider'
+  image_provider_models?: string[]
   // 后端响应里 credentials 已脱敏：access_token / refresh_token / id_token /
   // api_key / session_key / cookie / aws_secret_access_key / aws_session_token /
   // service_account_json / service_account / private_key 不会出现，

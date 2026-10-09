@@ -1,0 +1,26 @@
+export default {
+  accountActivity: {
+    title: '近期使用', open: '查看近期使用情况', hour: '近 1 小时', day: '近 24 小时',
+    auto: '每 30 秒刷新', refresh: '刷新统计', updated: '更新于 {time}', unavailable: '统计暂不可用',
+    hint: '点击账号的近期使用，查看请求明细并调整调度。', requestsUnit: '次',
+    shortErrors: '失败 {failed} · 恢复 {recovered}', ttft: '首字', duration: '总耗时',
+    requests: '请求量', rate: '记录成功率', latency: '平均首字延迟', cost: '账号费用',
+    counts: '成功 {success} / 失败 {failed}', recovered: '重试后恢复', limited: '限流记录',
+    trend: '请求分布', success: '成功', failed: '失败', recoveredLegend: '恢复',
+    recent: '最近 30 条记录', errorsOnly: '只看异常', noRequests: '这段时间暂无使用记录',
+    noErrors: '最近记录中没有异常', model: '模型 / 时间', outcome: '结果', timing: '首字 / 总耗时',
+    amount: '费用', detail: '异常详情', retryRecovered: '重试恢复',
+    pause: '暂停调度', resume: '恢复调度', active: '参与调度', paused: '已暂停调度',
+    priority: '优先级', save: '保存', priorityHint: '数值越小越优先。暂停后，新请求由其他符合分组、模型与配额要求的账号承接；已有请求继续执行。',
+    changed: '账号调度设置已更新', changeFailed: '操作失败，请重试', invalidPriority: '请输入 1–9999 的整数优先级',
+    selectAccount: '切换查看账号', currentPage: '当前列表账号',
+    definition: '成功率 = 成功记录 ÷（成功 + 最终失败）。恢复记录为渠道报错后请求完成，不计入失败；并非所有重试尝试都会单独记录。延迟仅统计成功请求，首字仅统计有记录的请求。',
+    coverage: '统计基于已保存日志，可能受监控过滤、异步写入与保留期限影响。',
+    monitoringOff: '运维监控当前关闭：失败记录可能不完整，暂不显示成功率。',
+    loadFailed: '近期使用加载失败，可刷新重试。', stale: '刷新失败，当前显示上次数据。',
+    accountUnavailable: '账号状态为 {status}，恢复调度后仍须满足可用条件。',
+    restricted: '账号存在临时限制，恢复调度不会清除限流、过载或临时禁用。',
+    bucket: '{time} · 成功 {success} / 失败 {failed} / 恢复 {recovered}',
+    stats: '30 天统计', lastActivity: '最近活动', none: '暂无', close: '关闭',
+  }
+}

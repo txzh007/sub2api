@@ -136,13 +136,7 @@ func (s *APIKeyService) imageBridgeModelAvailabilityForGroup(ctx context.Context
 		if group.Platform != PlatformComposite && group.Platform != account.Platform {
 			continue
 		}
-		for model, target := range account.GetModelMapping() {
-			if strings.Contains(model, "*") || strings.TrimSpace(model) == "" {
-				continue
-			}
-			if !IsImageProviderModel(model) && !IsImageProviderModel(target) {
-				continue
-			}
+		for model := range ImageProviderRoutingModelMapping(&account) {
 			providersByModel[model] = append(providersByModel[model], account)
 		}
 	}
@@ -180,7 +174,9 @@ func (s *APIKeyService) imageBridgeModelAvailabilityForGroup(ctx context.Context
 		reason := ImageBridgeUnavailableTemporary
 		for i := range providers {
 			provider := &providers[i]
-			if !provider.IsImageProvider() {
+			// allAccounts is already restricted to the image generation group;
+			// membership is the opt-in for a shared OAuth account.
+			if !provider.IsImageProvider() && !provider.SupportsOAuthImageProvider() {
 				reason = ImageBridgeUnavailableWrongPurpose
 				continue
 			}

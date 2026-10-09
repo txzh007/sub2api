@@ -254,6 +254,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		Platform:                a.Platform,
 		Type:                    a.Type,
 		Purpose:                 service.NormalizeAccountPurpose(a.Purpose),
+		ImageProviderModels:     service.ImageProviderModelNames(a),
 		Credentials:             redactedCreds,
 		CredentialsStatus:       credsStatus,
 		Extra:                   extra,

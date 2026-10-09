@@ -45,6 +45,7 @@ export async function list(
   page: number = 1,
   pageSize: number = 20,
   filters?: {
+    scope?: 'general' | 'image_providers'
     platform?: string
     type?: string
     status?: string

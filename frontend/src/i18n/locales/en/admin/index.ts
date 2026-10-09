@@ -7,6 +7,10 @@ import settings from './settings'
 import audit from './audit'
 import promptAudit from './promptAudit'
 import plugins from './plugins'
+import pelicanTest from './pelicanTest'
+import modelAllowlist from './modelAllowlist'
+import batchTest from './batchTest'
+import accountActivity from './accountActivity'
 
 export default {
   ...overview,
@@ -18,4 +22,8 @@ export default {
   ...audit,
   ...promptAudit,
   ...plugins,
+  ...pelicanTest,
+  ...modelAllowlist,
+  ...batchTest,
+  ...accountActivity,
 }

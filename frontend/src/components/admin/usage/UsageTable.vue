@@ -191,6 +191,13 @@
                   <span class="font-medium text-pink-600 dark:text-pink-400">{{ row.image_output_tokens.toLocaleString() }}</span>
                 </div>
               </div>
+              <div
+                class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+                :title="t('usage.cacheHitRateHint')"
+              >
+                <span>{{ t('usage.cacheHitRate') }}</span>
+                <span class="font-medium tabular-nums text-sky-600 dark:text-sky-400">{{ formatCacheHitRate(row) }}</span>
+              </div>
             </div>
             <!-- Token Detail Tooltip -->
             <div
@@ -541,6 +548,7 @@ import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatReasoningEffort, reasoningEffortValuesEqual } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
+import { formatCacheHitRate } from '@/utils/usageCache'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {

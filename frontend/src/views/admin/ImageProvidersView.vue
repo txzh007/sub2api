@@ -5,7 +5,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.hint') }}</p>
           <div class="flex gap-2">
-            <button class="btn btn-secondary" :disabled="loading" @click="load">{{ t('common.refresh') }}</button>
+            <button class="btn btn-secondary" :disabled="loading" @click="load()">{{ t('common.refresh') }}</button>
             <button class="btn btn-secondary" :disabled="loading || !group" @click="openCopy">{{ t('imageProviders.copyExisting') }}</button>
             <button class="btn btn-primary" :disabled="loading || !group" @click="openCreate">{{ t('imageProviders.create') }}</button>
           </div>
@@ -45,7 +45,15 @@
                 <label for="codex-builtin-image-model" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-300">{{ t('imageProviders.codexRequestModel') }}</label>
                 <span class="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-400 ring-1 ring-inset ring-gray-200 dark:bg-dark-800 dark:ring-dark-600">CODEX</span>
               </div>
-              <input id="codex-builtin-image-model" v-model="codexMapping.builtin_model" class="input border-0 bg-white font-mono shadow-sm ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-primary-500 dark:bg-dark-800 dark:ring-dark-600" :disabled="codexMappingLoading" />
+              <Select
+                id="codex-builtin-image-model"
+                v-model="codexMapping.builtin_model"
+                :options="codexBuiltinOptions"
+                :aria-label="t('imageProviders.codexBuiltinModel')"
+                :disabled="codexMappingLoading || codexMappingSaving"
+                searchable
+                creatable
+              />
               <p class="mt-2 text-xs text-gray-400 dark:text-dark-400">{{ t('imageProviders.codexBuiltinModel') }}</p>
             </div>
 
@@ -63,11 +71,16 @@
                 <label for="codex-upstream-image-model" class="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-300">{{ t('imageProviders.codexResolvedModel') }}</label>
                 <span class="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-primary-500 ring-1 ring-inset ring-primary-100 dark:bg-dark-800 dark:ring-primary-900">IMAGE GROUP</span>
               </div>
-              <input id="codex-upstream-image-model" v-model="codexMapping.target_model" class="input border-0 bg-white font-mono shadow-sm ring-1 ring-inset ring-primary-200 focus:ring-2 focus:ring-primary-500 dark:bg-dark-800 dark:ring-primary-900" list="codex-image-target-options" :disabled="codexMappingLoading" :placeholder="t('imageProviders.codexTargetPlaceholder')" />
-              <datalist id="codex-image-target-options">
-                <option v-for="model in codexTargetOptions" :key="model" :value="model" />
-              </datalist>
-              <p class="mt-2 text-xs text-primary-600/70 dark:text-primary-300/70">{{ t('imageProviders.codexTargetModel') }}</p>
+              <Select
+                id="codex-upstream-image-model"
+                v-model="codexMapping.target_model"
+                :options="codexTargetOptions"
+                :aria-label="t('imageProviders.codexResolvedModel')"
+                :disabled="loading || codexMappingLoading || codexMappingSaving"
+                searchable
+                creatable
+              />
+              <p class="mt-2 text-xs text-primary-600/70 dark:text-primary-300/70">{{ t('imageProviders.codexTargetSelectHint') }}</p>
             </div>
           </div>
           <p v-if="codexMappingError" role="alert" class="mx-5 mb-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">{{ codexMappingError }}</p>
@@ -75,7 +88,10 @@
       </template>
       <template #table>
         <DataTable :columns="columns" :data="accounts" :loading="loading">
-          <template #cell-platform="{ row }">{{ accountTypeLabel(row.platform) }}</template>
+          <template #cell-platform="{ row }">
+            {{ accountTypeLabel(row.platform) }}
+            <span v-if="isLinkedOAuth(row)" class="ml-2 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">{{ t('imageProviders.linkedOAuth') }}</span>
+          </template>
           <template #cell-base_url="{ row }">
             <span class="block max-w-80 truncate" :title="String(row.credentials?.base_url || '')">{{ row.credentials?.base_url || '—' }}</span>
           </template>
@@ -89,9 +105,15 @@
           </template>
           <template #cell-actions="{ row }">
             <div class="flex gap-3">
-              <button class="text-primary-600 hover:underline" :disabled="saving" @click="openEdit(row.id)">{{ t('common.edit') }}</button>
-              <button class="text-gray-600 hover:underline dark:text-dark-300" :disabled="saving" @click="toggle(row)">{{ row.status === 'active' && row.schedulable ? t('imageProviders.disable') : t('imageProviders.enable') }}</button>
-              <button class="text-red-600 hover:underline dark:text-red-400" :disabled="saving" @click="openDelete(row)">{{ t('common.delete') }}</button>
+              <template v-if="isLinkedOAuth(row)">
+                <RouterLink :to="{ path: '/admin/accounts', query: { edit: row.id } }" class="text-primary-600 hover:underline">{{ t('imageProviders.manageOAuth') }}</RouterLink>
+                <button class="text-red-600 hover:underline dark:text-red-400" :disabled="saving" @click="openDelete(row)">{{ t('imageProviders.unlinkOAuth') }}</button>
+              </template>
+              <template v-else>
+                <button class="text-primary-600 hover:underline" :disabled="saving" @click="openEdit(row.id)">{{ t('common.edit') }}</button>
+                <button class="text-gray-600 hover:underline dark:text-dark-300" :disabled="saving" @click="toggle(row)">{{ row.status === 'active' && row.schedulable ? t('imageProviders.disable') : t('imageProviders.enable') }}</button>
+                <button class="text-red-600 hover:underline dark:text-red-400" :disabled="saving" @click="openDelete(row)">{{ t('common.delete') }}</button>
+              </template>
             </div>
           </template>
         </DataTable>
@@ -214,13 +236,13 @@
         </button>
       </template>
     </BaseDialog>
-    <BaseDialog :show="!!deleteTarget" :title="t('imageProviders.deleteTitle')" width="narrow" @close="cancelDelete">
-      <p class="text-sm text-gray-600 dark:text-dark-300">{{ t('imageProviders.deleteConfirm', { name: deleteTarget?.name }) }}</p>
+    <BaseDialog :show="!!deleteTarget" :title="t(isLinkedOAuth(deleteTarget) ? 'imageProviders.unlinkOAuth' : 'imageProviders.deleteTitle')" width="narrow" @close="cancelDelete">
+      <p class="text-sm text-gray-600 dark:text-dark-300">{{ t(isLinkedOAuth(deleteTarget) ? 'imageProviders.unlinkConfirm' : 'imageProviders.deleteConfirm', { name: deleteTarget?.name }) }}</p>
       <p class="mt-3 text-sm text-gray-500 dark:text-dark-400">{{ t('imageProviders.deleteImpact') }}</p>
       <p v-if="deleteError" role="alert" class="mt-3 text-sm text-red-600">{{ deleteError }}</p>
       <template #footer>
         <button class="btn btn-secondary" :disabled="saving" @click="cancelDelete">{{ t('common.cancel') }}</button>
-        <button class="btn btn-danger" :disabled="saving" @click="confirmDelete">{{ saving ? t('imageProviders.deleting') : t('common.delete') }}</button>
+        <button class="btn btn-danger" :disabled="saving" @click="confirmDelete">{{ saving ? t('common.saving') : t(isLinkedOAuth(deleteTarget) ? 'imageProviders.unlinkOAuth' : 'common.delete') }}</button>
       </template>
     </BaseDialog>
   </AppLayout>
@@ -239,6 +261,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import { getModelsByPlatform } from '@/composables/useModelWhitelist'
 
 const { t } = useI18n()
 const app = useAppStore()
@@ -263,6 +286,7 @@ const codexMapping = ref({ builtin_model: 'gpt-image-2', target_model: '' })
 const codexMappingLoading = ref(false)
 const codexMappingSaving = ref(false)
 const codexMappingError = ref('')
+const providerModelNames = ref<string[]>([])
 type ImageAccountPlatform = 'openai' | 'gemini' | 'grok'
 
 const emptyForm = () => ({ name: '', platform: 'openai' as ImageAccountPlatform, baseURL: '', apiKey: '', models: '', concurrency: 3 })
@@ -281,7 +305,16 @@ const visibleRemoteModels = computed(() => (remoteModels.value || []).filter(mod
 ))
 const selectedModelTargets = computed(() => new Set(modelLines().map(modelTarget)))
 const selectedModels = computed(() => [...new Set(modelLines())].map(line => ({ line, name: line.split('=')[0].trim(), target: modelTarget(line) })))
-const codexTargetOptions = computed(() => [...new Set(accounts.value.flatMap(modelNames))].sort())
+const codexBuiltinOptions = computed(() => [...new Set([
+  'gpt-image-2',
+  ...getModelsByPlatform('openai').filter(model => model.startsWith('gpt-image-')),
+  codexMapping.value.builtin_model.trim()
+])].filter(Boolean).map(model => ({ value: model, label: model })))
+const codexTargetOptions = computed(() => [
+  { value: '', label: t('imageProviders.codexDefaultModel', { model: codexMapping.value.builtin_model }) },
+  ...[...new Set([...providerModelNames.value, codexMapping.value.target_model.trim()])]
+    .filter(Boolean).sort().map(model => ({ value: model, label: model }))
+])
 
 function modelLines() { return form.value.models.split('\n').map(line => line.trim()).filter(Boolean) }
 function modelTarget(line: string) { return line.includes('=') ? line.slice(line.indexOf('=') + 1).trim() : line }
@@ -357,7 +390,11 @@ function accountTypeLabel(platform: string) {
 }
 
 function modelNames(account: AccountListItem) {
-  return Object.keys((account.credentials?.model_mapping || {}) as Record<string, string>)
+  return account.image_provider_models ?? Object.keys((account.credentials?.model_mapping || {}) as Record<string, string>)
+}
+
+function isLinkedOAuth(account: AccountListItem | null) {
+  return account?.type === 'oauth' && account.purpose !== 'image_provider'
 }
 
 function message(error: unknown) {
@@ -366,7 +403,7 @@ function message(error: unknown) {
   return response?.detail || response?.message || detail?.message || t('imageProviders.failed')
 }
 
-async function load() {
+async function load(refreshModels = true) {
   loading.value = true
   try {
     const groups = await adminAPI.groups.getAllIncludingInactive()
@@ -374,11 +411,24 @@ async function load() {
     if (!group.value) {
       accounts.value = []
       total.value = 0
+      providerModelNames.value = []
       return
     }
-    const result = await adminAPI.accounts.list(page.value, 100, { group: String(group.value.id), type: 'apikey', lite: 'false' })
-    accounts.value = result.items.filter(item => item.purpose === 'image_provider')
+    const filters = { group: String(group.value.id), scope: 'image_providers' as const, lite: 'false' }
+    const result = await adminAPI.accounts.list(page.value, 100, filters)
+    accounts.value = result.items
     total.value = result.total
+    if (refreshModels) {
+      const names = new Set(result.items.flatMap(modelNames))
+      // The model selector covers all providers, regardless of the table page.
+      const totalPages = Math.ceil(result.total / 100)
+      for (let providerPage = 1; providerPage <= totalPages; providerPage++) {
+        if (providerPage === page.value) continue
+        const providers = await adminAPI.accounts.list(providerPage, 100, filters)
+        providers.items.flatMap(modelNames).forEach(model => names.add(model))
+      }
+      providerModelNames.value = [...names]
+    }
   } catch (error) {
     app.showError(message(error))
   } finally {
@@ -579,10 +629,18 @@ async function confirmDelete() {
   saving.value = true
   deleteError.value = ''
   try {
-    await adminAPI.accounts.delete(deleteTarget.value.id)
+    const linkedOAuth = isLinkedOAuth(deleteTarget.value)
+    if (linkedOAuth) {
+      // Read the current bindings so unlinking never uses a stale table row.
+      const current = await adminAPI.accounts.getById(deleteTarget.value.id)
+      if (!isLinkedOAuth(current) || !group.value) throw new Error(t('imageProviders.failed'))
+      await adminAPI.accounts.update(current.id, { group_ids: (current.group_ids || []).filter(id => id !== group.value!.id) })
+    } else {
+      await adminAPI.accounts.delete(deleteTarget.value.id)
+    }
     deleteTarget.value = null
     if (accounts.value.length === 1 && page.value > 1) page.value--
-    app.showSuccess(t('imageProviders.deleted'))
+    app.showSuccess(t(linkedOAuth ? 'imageProviders.unlinkedOAuth' : 'imageProviders.deleted'))
     await load()
   } catch (error) {
     deleteError.value = message(error)
@@ -591,7 +649,7 @@ async function confirmDelete() {
   }
 }
 
-function changePage(value: number) { page.value = value; void load() }
+function changePage(value: number) { page.value = value; void load(false) }
 onMounted(() => {
   void load()
   void loadCodexMapping()

@@ -213,6 +213,9 @@ type Account struct {
 	Platform string  `json:"platform"`
 	Type     string  `json:"type"`
 	Purpose  string  `json:"purpose"`
+
+	ImageProviderModels []string `json:"image_provider_models"`
+
 	// Credentials 经 RedactCredentials 处理后只含非敏感子键；敏感 token / api_key / 私钥
 	// 的存在性通过 CredentialsStatus（has_<key>）暴露，原始值不返回前端。
 	Credentials             map[string]any                 `json:"credentials"`

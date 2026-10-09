@@ -643,6 +643,14 @@ func (h *AccountHandler) listAccountSchedulerScoreFilterPool(
 // List handles listing all accounts with pagination
 // GET /api/v1/admin/accounts
 func (h *AccountHandler) List(c *gin.Context) {
+	switch c.Query("scope") {
+	case "", "general":
+	case "image_providers":
+		c.Request = c.Request.WithContext(service.WithImageProviderAccountList(c.Request.Context()))
+	default:
+		response.BadRequest(c, "invalid account list scope")
+		return
+	}
 	page, pageSize := response.ParsePagination(c)
 	platform := c.Query("platform")
 	accountType := c.Query("type")

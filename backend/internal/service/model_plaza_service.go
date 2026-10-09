@@ -33,9 +33,8 @@ type PlazaModel struct {
 
 // PlazaGroup 模型广场中以分组为顶层的条目。
 //
-// 与 AvailableGroupRef 相比多了 Description 与 Models；Models 来自该分组关联渠道的
-// 支持模型（普通分组按分组平台隔离，Composite 分组展开关联渠道已配置的
-// 具体平台），与「可用渠道」页口径一致。
+// 与 AvailableGroupRef 相比多了 Description 与 Models。启用白名单的分组从
+// 共享候选目录展开白名单；其余分组沿用关联渠道的支持模型。
 type PlazaGroup struct {
 	ID                 int64
 	Name               string
@@ -62,7 +61,7 @@ type PlazaGroup struct {
 
 // ModelPlazaService 聚合模型广场数据。
 //
-// 模型枚举来自渠道配置；token 模型的展示单价与阶梯由 BillingService 的阶梯表
+// 模型枚举来自分组白名单或渠道配置；token 模型的展示单价与阶梯由 BillingService 的阶梯表
 // 查询给出（与扣费走同一条解析链与计费函数），图片/按次模型沿用渠道/分组档位价。
 type ModelPlazaService struct {
 	channelRepo    ChannelRepository
@@ -70,6 +69,13 @@ type ModelPlazaService struct {
 	pricingService *PricingService
 	billingService *BillingService
 	resolver       *ModelPricingResolver
+	modelCatalog   *GroupModelCatalogService
+}
+
+func ProvideModelPlazaService(channelRepo ChannelRepository, groupRepo GroupRepository, pricingService *PricingService, billingService *BillingService, resolver *ModelPricingResolver, catalog *GroupModelCatalogService) *ModelPlazaService {
+	s := NewModelPlazaService(channelRepo, groupRepo, pricingService, billingService, resolver)
+	s.modelCatalog = catalog
+	return s
 }
 
 // NewModelPlazaService 创建模型广场服务。
@@ -91,8 +97,8 @@ func NewModelPlazaService(
 
 // ListGroups 返回模型广场数据：每个活跃分组附带其可用模型与定价。
 //
-// 模型枚举口径与 ListAvailable 一致（Active 渠道、SupportedModels ∪ 全局定价回落、
-// 平台隔离），仅把顶层从渠道换成分组：
+// 未配置白名单的分组沿用 ListAvailable 的渠道模型口径；配置白名单的分组
+// 从共享候选目录展开并按网关同源规则过滤。定价保持原有口径：
 //   - 渠道按 lower(name) 排序后遍历，保证同名模型去重结果确定；
 //   - 同分组同名模型「先见者胜」，仅当已存条目无定价而新条目有定价时升级替换；
 //   - token 模型的单价与阶梯按实收口径合成（见 ResolveContextPricingSchedule），
@@ -199,6 +205,32 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 	out := make([]PlazaGroup, 0, len(order))
 	for _, gid := range order {
 		pg := byGroup[gid]
+		g := groupEnt[gid]
+		if g.ModelAllowlistEnabled() {
+			// A configured allowlist is the public catalog, even when this group
+			// has no channel. Expand wildcard rules against known concrete names.
+			if s.modelCatalog != nil {
+				candidates, err := s.modelCatalog.forGroup(ctx, g, channels)
+				if err != nil {
+					return nil, fmt.Errorf("list group %d model catalog: %w", gid, err)
+				}
+				fillGlobalPricingFallback(s.pricingService, candidates)
+				pg.Models = nil
+				for _, m := range candidates {
+					if !strings.Contains(m.Name, "*") && g.ModelAllowlist.Allows(m.Name) {
+						pg.Models = append(pg.Models, PlazaModel{Name: m.Name, Platform: m.Platform, Pricing: m.Pricing})
+					}
+				}
+			} else {
+				filtered := pg.Models[:0]
+				for _, m := range pg.Models {
+					if g.ModelAllowlist.Allows(m.Name) {
+						filtered = append(filtered, m)
+					}
+				}
+				pg.Models = filtered
+			}
+		}
 		if len(pg.Models) == 0 {
 			continue
 		}
@@ -208,7 +240,6 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 			}
 			return pg.Models[i].Platform < pg.Models[j].Platform
 		})
-		g := groupEnt[gid]
 		for j := range pg.Models {
 			s.fillDisplayPricing(ctx, &pg.Models[j], g)
 			pg.Models[j].OfficialPricing = s.lookupOfficialPricing(ctx, pg.Models[j].Name, officialMemo)

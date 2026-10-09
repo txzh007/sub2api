@@ -2,8 +2,8 @@
 
 TToken is an independently versioned distribution based on Sub2API.
 
-- TToken version: `0.4.0`
-- Upstream baseline: `Sub2API 0.2.4` (`98d86915becae9fe9491a91ffc6defd5235c8d2b`)
+- TToken version: `0.6.6`
+- Upstream baseline: `Sub2API 0.2.15` (`f2669c8cf62555cd92389b3f55920e9e6e7c6ff2`)
 - Product-facing name: `TToken`
 - Upstream-compatible Go module and internal paths are intentionally retained
   to keep future Sub2API merges manageable.
@@ -48,6 +48,41 @@ the release binary. A standalone install therefore keeps domestic RMB, image,
 and per-request video pricing without requiring a source checkout. Writable
 administrator overrides remain in `data/model_pricing_overrides.json` and are
 never replaced by a binary update.
+
+## TToken 0.6.6
+
+- Adds recent account activity, recorded success rates, recovered errors and
+  manual scheduling controls. Integration boundaries and metric definitions:
+  [account activity](docs/ttoken/account-activity.md).
+- Adds single-account model batch testing and a Pelican workbench with custom
+  prompt templates, persistent queues, result comparison, cancellation and retries.
+  Custom files and upstream integration hooks are listed in
+  [the batch testing integration guide](docs/ttoken/batch-testing.md).
+- Integrates Sub2API 0.2.15, adding Cline and Command Code providers,
+  output TPS reporting, and a shared platform catalog.
+- Includes protocol conversion, WebSocket billing, model discovery, and
+  frontend request lifecycle fixes.
+- Preserves TToken's model allowlists, API restrictions, cache rates, and
+  image-provider features. Custom UI and account activity extensions remain
+  separate from upstream components to simplify future merges.
+
+## TToken 0.6.5
+
+- Integrates Sub2API 0.2.14, including the 0.2.13 fixes for TypeSafe account
+  creation and usage billing after API key deletion.
+- Includes EasyPay callback security fixes, stronger initial administrator
+  setup validation, and remote Codex model discovery configuration fixes.
+- Preserves the model allowlist, API model restrictions, usage cache rates,
+  image-provider management, and other TToken 0.6.4 features.
+
+## TToken 0.6.4
+
+- Integrates the Sub2API 0.2.12 upstream snapshot.
+- Adds a dedicated group model allowlist assignment page with search, bulk
+  selection, custom model patterns, copying between groups, and draft saving.
+- Uses the existing group allowlist for both API admission and Model Plaza
+  visibility, expanding configured models beyond channel-only catalogs.
+- Reports when Model Plaza is disabled and refreshes its settings before opening.
 
 ## TToken 0.4.0
 

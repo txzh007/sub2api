@@ -162,6 +162,7 @@
             </template>
           </AccountTableActions>
         </div>
+        <AccountActivityToolbar v-model:hours="activityHours" v-model:auto-refresh="activityAutoRefresh" :loading="activityLoading" :error="activityError" :updated-at="activityUpdatedAt" :monitoring="activityMonitoring" @refresh="refreshActivity" />
         <div
           v-if="hasPendingListSync"
           class="mt-2 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-200"
@@ -303,6 +304,9 @@
               :loading="todayStatsLoading"
               :error="todayStatsError"
             />
+          </template>
+          <template #cell-recent_activity="{ row }">
+            <AccountActivityCell :stats="activityStats[String(row.id)]" :loading="activityLoading" :error="activityError" :monitoring="activityMonitoring" @open="activityAccount = row" />
           </template>
           <template #cell-groups="{ row }">
             <AccountGroupsCell :groups="accountGroupsForRow(row)" :max-display="4" />
@@ -460,6 +464,7 @@
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
+    <AccountActivityDialog :account="activityAccount" :accounts="accounts" v-model:hours="activityHours" @close="activityAccount = null" @select="activityAccount = $event" @updated="patchAccountInList" @stats="account => { activityAccount = null; handleViewStats(account) }" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :anchor-rect="menu.anchorRect" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -494,6 +499,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
@@ -515,8 +521,12 @@ import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActions
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
-import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
+import AccountTestModal from '@/components/ttoken/account/AccountTestDialog.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
+import AccountActivityDialog from '@/components/ttoken/account/AccountActivityDialog.vue'
+import AccountActivityCell from '@/components/ttoken/account/AccountActivityCell.vue'
+import AccountActivityToolbar from '@/components/ttoken/account/AccountActivityToolbar.vue'
+import { useAccountActivity } from '@/components/ttoken/account/useAccountActivity'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
@@ -1118,6 +1128,13 @@ const {
   getId: (account) => account.id
 })
 
+const activityAccount = ref<AccountListItem | null>(null)
+const {
+  hours: activityHours, stats: activityStats, loading: activityLoading,
+  error: activityError, monitoring: activityMonitoring, updatedAt: activityUpdatedAt,
+  autoRefresh: activityAutoRefresh, refresh: refreshActivity
+} = useAccountActivity(accounts)
+
 const selectingAllResults = ref(false)
 const selectedAllResultIDs = ref<Set<number> | null>(null)
 const selectionRequestVersion = ref(0)
@@ -1374,6 +1391,7 @@ const isAnyModalOpen = computed(() => {
     showReAuth.value ||
     showTest.value ||
     showStats.value ||
+    !!activityAccount.value ||
     showSchedulePanel.value ||
     showErrorPassthrough.value ||
     showTLSFingerprintProfiles.value
@@ -1790,6 +1808,7 @@ const allColumns = computed(() => {
   const c = [
     { key: 'select', label: '', sortable: false },
     { key: 'name', label: t('admin.accounts.columns.name'), sortable: true },
+    { key: 'recent_activity', label: t('admin.accountActivity.title'), sortable: false },
     { key: 'id', label: t('admin.accounts.columns.id'), sortable: true },
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
@@ -1828,6 +1847,7 @@ const cols = computed(() =>
   )
 )
 
+const route = useRoute()
 const accountDetailLoading = new Set<number>()
 const loadAccountDetails = async (account: Pick<AccountListItem, 'id'>): Promise<Account | null> => {
   if (accountDetailLoading.has(account.id)) return null
@@ -2543,7 +2563,7 @@ onMounted(async () => {
   loadUpstreamBillingProbeGlobalState()
   const [proxiesResult, groupsResult] = await Promise.allSettled([
     adminAPI.proxies.getAll(),
-    adminAPI.groups.getAll()
+    adminAPI.groups.getAllIncludingInactive()
   ])
   if (proxiesResult.status === 'fulfilled') {
     proxies.value = proxiesResult.value
@@ -2551,9 +2571,17 @@ onMounted(async () => {
     console.error('Failed to load proxies:', proxiesResult.reason)
   }
   if (groupsResult.status === 'fulfilled') {
-    groups.value = groupsResult.value
+    groups.value = groupsResult.value.filter(group => group.status === 'active' || group.system_role === 'image_generation')
   } else {
     console.error('Failed to load groups:', groupsResult.reason)
+  }
+  const editID = Number(route?.query.edit)
+  if (Number.isSafeInteger(editID) && editID > 0) {
+    const account = await loadAccountDetails({ id: editID })
+    if (account && account.purpose !== 'image_provider') {
+      edAcc.value = account
+      showEdit.value = true
+    }
   }
   window.addEventListener('scroll', handleScroll, true)
   window.addEventListener('resize', handleViewportResize)

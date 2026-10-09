@@ -1,0 +1,26 @@
+export default {
+  accountActivity: {
+    title: 'Recent activity', open: 'View recent account activity', hour: 'Last hour', day: 'Last 24 hours',
+    auto: 'Refresh every 30s', refresh: 'Refresh activity', updated: 'Updated {time}', unavailable: 'Unavailable',
+    hint: 'Open account activity to inspect requests and adjust scheduling.', requestsUnit: 'requests',
+    shortErrors: '{failed} failed · {recovered} recovered', ttft: 'TTFT', duration: 'Duration',
+    requests: 'Requests', rate: 'Recorded success rate', latency: 'Average first token', cost: 'Account cost',
+    counts: '{success} succeeded / {failed} failed', recovered: 'Recovered requests', limited: 'Rate-limit records',
+    trend: 'Request timeline', success: 'Succeeded', failed: 'Failed', recoveredLegend: 'Recovered',
+    recent: 'Latest 30 records', errorsOnly: 'Errors only', noRequests: 'No recorded activity in this period',
+    noErrors: 'No errors in recent records', model: 'Model / time', outcome: 'Outcome', timing: 'TTFT / duration',
+    amount: 'Cost', detail: 'Error details', retryRecovered: 'Recovered',
+    pause: 'Pause scheduling', resume: 'Resume scheduling', active: 'Scheduling enabled', paused: 'Scheduling paused',
+    priority: 'Priority', save: 'Save', priorityHint: 'Lower numbers take priority. Pausing sends new requests to other eligible accounts with matching groups, models and quotas. Existing requests continue.',
+    changed: 'Account scheduling updated', changeFailed: 'Update failed. Please retry.', invalidPriority: 'Enter an integer priority from 1 to 9999',
+    selectAccount: 'View another account', currentPage: 'Accounts on this page',
+    definition: 'Success rate = successes / (successes + final failures). Recovered records describe requests completed after a provider error and do not count as failures. Individual retry attempts may not all be recorded. Latency uses successful requests; TTFT uses available samples only.',
+    coverage: 'Based on saved logs; monitoring filters, async writes and retention can affect coverage.',
+    monitoringOff: 'Ops monitoring is disabled. Failure coverage may be incomplete, so success rate is hidden.',
+    loadFailed: 'Unable to load activity. Refresh to retry.', stale: 'Refresh failed. Showing the previous snapshot.',
+    accountUnavailable: 'Account status is {status}. Resuming still requires the account to be eligible.',
+    restricted: 'Temporary restrictions exist. Resuming does not clear rate limits, overload or temporary holds.',
+    bucket: '{time} · {success} succeeded / {failed} failed / {recovered} recovered',
+    stats: '30-day statistics', lastActivity: 'Last activity', none: 'None', close: 'Close',
+  }
+}
